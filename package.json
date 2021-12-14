@@ -14,7 +14,8 @@
   "author": "Eyevinn Technology <work@eyevinn.se>",
   "license": "UNLICENSED",
   "contributors": [
-    "Oscar Nord <oscar.nord@eyevinn.se> (Eyevinn Technology AB)"
+    "Oscar Nord <oscar.nord@eyevinn.se> (Eyevinn Technology AB)",
+    "Nicholas Frederiksen <nicholas.frederiksen@eyevinn.se> (Eyevinn Technology AB)"
   ],
   "bugs": {
     "url": "https://github.com/Eyevinn/player-analytics-eventsink/issues"
@@ -23,16 +24,19 @@
   "devDependencies": {
     "@types/jasmine": "^3.10.2",
     "aws-sdk-client-mock": "^0.5.6",
+    "dotenv": "^10.0.0",
     "eslint": "^6.1.3",
     "jasmine": "^3.10.0",
     "ts-node": "^10.4.0",
     "typescript": "^4.3.5"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.44.0",
     "@aws-sdk/client-sqs": "^3.42.0",
     "@eyevinn/player-analytics-shared": "^0.1.9",
     "@types/node": "^16.6.1",
     "ajv": "^8.8.2",
+    "aws-sdk": "^2.1046.0",
     "winston": "^3.3.3"
   }
 }
