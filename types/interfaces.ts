@@ -1,15 +1,19 @@
 import winston from "winston";
 
-export interface IDDBCommandInput {
+export interface IDDBPutItemInput {
   tableName: string;
   data: Object;
+}
+export interface IDDBGetItemInput {
+  tableName: string;
+  eventId: string;
 }
 export abstract class AbstractDBAdapter {
   logger: winston.Logger;
   dbClient: any;
-
+  abstract createTable(name: string): Promise<void>;
   abstract putItem(params: Object): Promise<void>;
   abstract getItem(params: Object): Promise<any>;
   abstract deleteItem(params: Object): Promise<void>;
-  abstract getSessionItems(params: Object): Promise<any>;
+  abstract getItemsBySession(params: Object): Promise<any>;
 }

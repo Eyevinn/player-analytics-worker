@@ -1,31 +1,36 @@
 require("dotenv").config();
 import {
-  DynamoDB,
   CreateTableCommand,
   ListTablesCommand,
   PutItemCommand,
   DynamoDBClient,
   GetItemCommand,
   DeleteItemCommand,
-  QueryCommand,
 } from "@aws-sdk/client-dynamodb";
-import { valid_events } from "../spec/events/test_events";
 import winston from "winston";
-import { AbstractDBAdapter, IDDBCommandInput } from "../types/interfaces";
+import {
+  AbstractDBAdapter,
+  IDDBGetItemInput,
+  IDDBPutItemInput,
+} from "../types/interfaces";
+import { v4 as uuidv4 } from "uuid";
+import { DynamoDB } from "aws-sdk";
 
 export class DynamoDBAdapter implements AbstractDBAdapter {
   logger: winston.Logger;
   dbClient: DynamoDBClient;
+  docClient: any;
 
   constructor(logger: winston.Logger) {
     this.dbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+    this.docClient = new DynamoDB.DocumentClient();
     this.logger = logger;
   }
 
   async createTable(tableName: string): Promise<void> {
     try {
       const tablesData = await this.dbClient.send(
-        new ListTablesCommand({ Limit: 10 })
+        new ListTablesCommand({ Limit: 100 })
       );
       // Create new Table if none exists
       if (
@@ -35,13 +40,13 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
         const params = {
           AttributeDefinitions: [
             {
-              AttributeName: "message_id",
+              AttributeName: "eventId",
               AttributeType: "S",
             },
           ],
           KeySchema: [
             {
-              AttributeName: "message_id",
+              AttributeName: "eventId",
               KeyType: "HASH",
             },
           ],
@@ -63,46 +68,49 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
     }
   }
 
-  async putItem(params: IDDBCommandInput): Promise<void> {
-    const eventItem = {};
-    Object.keys(params.data).forEach((field) => {
-      eventItem[field] = { S: JSON.stringify(params.data[field]) };
+  async putItem(params: IDDBPutItemInput): Promise<void> {
+    const eventItem = {
+      eventId: { S: uuidv4() },
+    };
+    Object.keys(params.data).forEach((key) => {
+      eventItem[key] = { S: JSON.stringify(params.data[key]) };
     });
 
     try {
-      const data = await this.dbClient.send(
+      await this.dbClient.send(
         new PutItemCommand({
           TableName: params.tableName,
           Item: eventItem,
         })
       );
-      this.logger.info("Put to Table", data);
+      this.logger.info("Put to Table");
     } catch (err) {
       this.logger.error("Error", err);
+      throw new Error(err);
     }
   }
 
-  async getItem(params: IDDBCommandInput): Promise<any> {
+  async getItem(params: IDDBGetItemInput): Promise<any> {
     try {
       const rawData = await this.dbClient.send(
         new GetItemCommand({
           TableName: params.tableName,
-          Key: params.data["key"],
+          Key: { eventId: { S: params.eventId } },
         })
       );
-      this.logger.info("Read from Table", rawData);
+      this.logger.info("Read from Table");
       return rawData;
     } catch (err) {
       this.logger.error("Error", err);
     }
   }
 
-  async deleteItem(params: IDDBCommandInput): Promise<any> {
+  async deleteItem(params: IDDBGetItemInput): Promise<any> {
     try {
       const data = await this.dbClient.send(
         new DeleteItemCommand({
           TableName: params.tableName,
-          Key: params.data["key"],
+          Key: { eventId: { S: params.eventId } },
         })
       );
       this.logger.info("Deleted from Table", data);
@@ -112,20 +120,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
     }
   }
 
-  async getSessionItems(params: IDDBCommandInput): Promise<any> {
-    const queryParams = {
-      KeyConditionExpression: "sessionId = :sid",
-      ExpressionAttributeValues: {
-        ":sid": { S: params.data["sessionId"] },
-      },
-      TableName: params.tableName,
-    };
-    try {
-      const data = await this.dbClient.send(new QueryCommand(queryParams));
-      this.logger.info("Got Items for Session");
-      return data;
-    } catch (err) {
-      this.logger.error("Error", err);
-    }
+  async getItemsBySession(params: any): Promise<any> {
+    //TODO
   }
 }

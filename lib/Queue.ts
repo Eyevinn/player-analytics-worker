@@ -20,18 +20,41 @@ export default class Queue {
           this.logger.warn("No queue type specified");
           throw new Error("No queue type specified");
       }
-      console.log("I made something")
       this.QueueAdapter = new queueAdapter(this.logger);
     }
   }
 
   public async receive(): Promise<Object> {
-    await this._getQueueAdapter();
-    return this.QueueAdapter.pullFromQueue();
+    try {
+      await this._getQueueAdapter();
+      const queueResponse = await this.QueueAdapter.pullFromQueue();
+      return queueResponse;
+    } catch (err) {
+      this.logger.error(err);
+      throw new Error(err);
+    }
   }
 
   public async remove(queueMessageObject: Object): Promise<Object> {
-    await this._getQueueAdapter();
-    return this.QueueAdapter.removeFromQueue(queueMessageObject);
+    try {
+      await this._getQueueAdapter();
+      const queueuResponse = await this.QueueAdapter.removeFromQueue(
+        queueMessageObject
+      );
+      return queueuResponse;
+    } catch (err) {
+      this.logger.error(err);
+      throw new Error(err);
+    }
+  }
+
+  public getEventJSONsFromMessages(messages: any[]): any {
+    try {
+      const queueResponse: any[] =
+        this.QueueAdapter.getEventJSONsFromMessages(messages);
+      return queueResponse;
+    } catch (err) {
+      this.logger.error(err);
+    }
   }
 }
