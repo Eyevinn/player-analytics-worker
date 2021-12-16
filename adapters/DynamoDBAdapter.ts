@@ -1,4 +1,3 @@
-require("dotenv").config();
 import {
   CreateTableCommand,
   ListTablesCommand,
@@ -6,65 +5,63 @@ import {
   DynamoDBClient,
   GetItemCommand,
   DeleteItemCommand,
-} from "@aws-sdk/client-dynamodb";
-import winston from "winston";
+} from '@aws-sdk/client-dynamodb';
+import winston from 'winston';
 import {
   AbstractDBAdapter,
   IDDBGetItemInput,
   IDDBPutItemInput,
-} from "../types/interfaces";
-import { v4 as uuidv4 } from "uuid";
-import { DynamoDB } from "aws-sdk";
+} from '../types/interfaces';
+import { v4 as uuidv4 } from 'uuid';
 
 export class DynamoDBAdapter implements AbstractDBAdapter {
   logger: winston.Logger;
   dbClient: DynamoDBClient;
-  docClient: any;
 
   constructor(logger: winston.Logger) {
     this.dbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-    this.docClient = new DynamoDB.DocumentClient();
     this.logger = logger;
+  }
+
+  async getTableNames(): Promise<string[]> {
+    const tablesData = await this.dbClient.send(
+      new ListTablesCommand({ Limit: 100 })
+    );
+    if (tablesData.TableNames) {
+      return tablesData.TableNames;
+    }
+    return [];
   }
 
   async createTable(tableName: string): Promise<void> {
     try {
-      const tablesData = await this.dbClient.send(
-        new ListTablesCommand({ Limit: 100 })
-      );
-      // Create new Table if none exists
-      if (
-        !tablesData.TableNames ||
-        !tablesData.TableNames.includes(tableName)
-      ) {
-        const params = {
-          AttributeDefinitions: [
-            {
-              AttributeName: "eventId",
-              AttributeType: "S",
-            },
-          ],
-          KeySchema: [
-            {
-              AttributeName: "eventId",
-              KeyType: "HASH",
-            },
-          ],
-          ProvisionedThroughput: {
-            ReadCapacityUnits: 3,
-            WriteCapacityUnits: 3,
+      const params = {
+        AttributeDefinitions: [
+          {
+            AttributeName: 'eventId',
+            AttributeType: 'S',
           },
-          TableName: tableName,
-          StreamSpecification: {
-            StreamEnabled: false,
+        ],
+        KeySchema: [
+          {
+            AttributeName: 'eventId',
+            KeyType: 'HASH',
           },
-        };
-        // Create a new table
-        const data = await this.dbClient.send(new CreateTableCommand(params));
-        this.logger.info("Table Created", data);
-      }
+        ],
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 3,
+          WriteCapacityUnits: 3,
+        },
+        TableName: tableName,
+        StreamSpecification: {
+          StreamEnabled: false,
+        },
+      };
+      const data = await this.dbClient.send(new CreateTableCommand(params));
+      this.logger.info(`Table '${tableName}' Created`);
     } catch (err) {
-      this.logger.error("Error", err);
+      this.logger.error('Table creation Error!');
+      throw new Error(err);
     }
   }
 
@@ -83,9 +80,11 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
           Item: eventItem,
         })
       );
-      this.logger.info("Put to Table");
+      this.logger.debug(
+        `Put event with event ID:${eventItem.eventId['S']} in Table`
+      );
     } catch (err) {
-      this.logger.error("Error", err);
+      this.logger.error('Error', err);
       throw new Error(err);
     }
   }
@@ -98,10 +97,10 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
           Key: { eventId: { S: params.eventId } },
         })
       );
-      this.logger.info("Read from Table");
+      this.logger.debug('Read Item from Table');
       return rawData;
     } catch (err) {
-      this.logger.error("Error", err);
+      this.logger.error('Error', err);
     }
   }
 
@@ -113,10 +112,10 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
           Key: { eventId: { S: params.eventId } },
         })
       );
-      this.logger.info("Deleted from Table", data);
+      this.logger.debug('Deleted Item from Table', data);
       return data;
     } catch (err) {
-      this.logger.error("Error", err);
+      this.logger.error('Error', err);
     }
   }
 

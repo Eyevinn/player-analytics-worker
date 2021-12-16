@@ -1,4 +1,4 @@
-import winston from "winston";
+import winston from 'winston';
 
 export interface IDDBPutItemInput {
   tableName: string;
@@ -11,6 +11,8 @@ export interface IDDBGetItemInput {
 export abstract class AbstractDBAdapter {
   logger: winston.Logger;
   dbClient: any;
+
+  abstract getTableNames(): Promise<string[]>;
   abstract createTable(name: string): Promise<void>;
   abstract putItem(params: Object): Promise<void>;
   abstract getItem(params: Object): Promise<any>;
