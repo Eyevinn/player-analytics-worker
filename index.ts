@@ -39,6 +39,7 @@ export class Worker {
     this.logger.info(`[${this.workerId}]: Worker is Active...`);
 
     while (this.state === WorkerState.ACTIVE) {
+      this.logger.info(`[${this.workerId}]: Worker is fetching from Queue...`);
       try {
         // ===Receive Queue Messages===
         const collectedMessages: any[] = await this.queue.receive();
@@ -56,8 +57,8 @@ export class Worker {
           this.queue.getEventJSONsFromMessages(collectedMessages);
 
         for (let i = 0; i < allEvents.length; i++) {
-          const _event = allEvents[i];
-          const tableName: string = this.tablePrefix + _event.host;
+          const eventJson = allEvents[i];
+          const tableName: string = this.tablePrefix + eventJson.host;
           const result: boolean = await this.db.TableExists(tableName); // has a cache
           if (!result) {
             // - Create Table if needed
@@ -70,9 +71,10 @@ export class Worker {
               );
             }
           }
-          writePromises.push(this.db.write(_event, tableName));
+          writePromises.push(this.db.write(eventJson, tableName));
         }
         const writeResults = await Promise.allSettled(writePromises);
+
         // ===Remove Messages from Queue===
         // - Only Messages that were not rejected
         const filtered = collectedMessages.filter(
@@ -84,14 +86,14 @@ export class Worker {
             this.logger.info(`[${this.workerId}]: Removed message from Queue!`);
           } catch (err) {
             this.logger.error(
-              `[${this.workerId}]: Error Removing from DB!`,
+              `[${this.workerId}]: Error Removing from Queue!`,
               err
             );
           }
         });
       } catch (err) {
         this.logger.error(
-          `[${this.workerId}]: Error Caught Freezing Worker: ${err}`
+          `[${this.workerId}]: Stopping Worker! Unexpected Error: ${err}`
         );
         this.state = WorkerState.INACTIVE;
       }

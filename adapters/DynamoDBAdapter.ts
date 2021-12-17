@@ -19,7 +19,10 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
   dbClient: DynamoDBClient;
 
   constructor(logger: winston.Logger) {
-    this.dbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+    this.dbClient = new DynamoDBClient({
+      region: process.env.AWS_REGION,
+      maxAttempts: 5,
+    });
     this.logger = logger;
   }
 
@@ -57,8 +60,8 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
           StreamEnabled: false,
         },
       };
-      const data = await this.dbClient.send(new CreateTableCommand(params));
-      this.logger.info(`Table '${tableName}' Created`);
+      await this.dbClient.send(new CreateTableCommand(params));
+      this.logger.info(`Created Table '${tableName}'`);
     } catch (err) {
       this.logger.error('Table creation Error!');
       throw new Error(err);
@@ -81,10 +84,10 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
         })
       );
       this.logger.debug(
-        `Put event with event ID:${eventItem.eventId['S']} in Table`
+        `Put event with event ID:${eventItem.eventId['S']} in Table:${params.tableName}`
       );
     } catch (err) {
-      this.logger.error('Error', err);
+      this.logger.error(err);
       throw new Error(err);
     }
   }
@@ -100,7 +103,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
       this.logger.debug('Read Item from Table');
       return rawData;
     } catch (err) {
-      this.logger.error('Error', err);
+      this.logger.error(err);
     }
   }
 
@@ -115,7 +118,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
       this.logger.debug('Deleted Item from Table', data);
       return data;
     } catch (err) {
-      this.logger.error('Error', err);
+      this.logger.error(err);
     }
   }
 

@@ -14,6 +14,7 @@ export default class EventDB {
     await this._getDBAdapter();
     // - If cache does not have the requested table name. Update cache, it might be there.
     if (!this.tableNamesCache.includes(tableName)) {
+      this.logger.info('Updating tableNames cache');
       this.tableNamesCache = await this.DBAdapter.getTableNames();
     }
     return this.tableNamesCache.includes(tableName);
@@ -44,14 +45,20 @@ export default class EventDB {
     }
   }
 
-  public async write(event: any, table: string): Promise<void> {
-    try {
-      await this.DBAdapter.putItem({
+  public write(event: any, table: string): Promise<any> {
+    const promise = new Promise((resolve, reject) => {
+      this.DBAdapter.putItem({
         tableName: table,
         data: event,
-      });
-    } catch (err) {
-      this.logger.error('Failed writing to DB');
-    }
+      })
+        .then(() => {
+          resolve('Wrote to Table');
+        })
+        .catch((err) => {
+          reject(err);
+        });
+    });
+    promise.catch(() => this.logger.error('Failed Writing to Database')); // suppress unhandled rejection
+    return promise;
   }
 }
