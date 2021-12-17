@@ -11,4 +11,3 @@ for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
 // Make them work!
 myWorkers.map((worker) => worker.start());
 
-// Lean back and relax...

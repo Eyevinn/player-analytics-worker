@@ -4,27 +4,29 @@ export default class EventDB {
   logger: winston.Logger;
   DBAdapter: any;
   tableNamesCache: string[];
+  instanceId: string;
 
-  constructor(logger: winston.Logger) {
+  constructor(logger: winston.Logger, id: string) {
     this.logger = logger;
     this.tableNamesCache = [];
+    this.instanceId = id;
   }
 
-  public async TableExists(tableName: string) {
+  public async TableExists(tableName: string): Promise<boolean> {
     await this._getDBAdapter();
     // - If cache does not have the requested table name. Update cache, it might be there.
     if (!this.tableNamesCache.includes(tableName)) {
-      this.logger.info('Updating tableNames cache');
+      this.logger.info(`[${this.instanceId}]: Updating tableNames cache`);
       this.tableNamesCache = await this.DBAdapter.getTableNames();
     }
     return this.tableNamesCache.includes(tableName);
   }
 
-  public async createTable(name: string) {
+  public async createTable(name: string): Promise<void> {
     try {
       await this.DBAdapter.createTable(name);
     } catch (err) {
-      this.logger.warn('Problem when creating table');
+      this.logger.warn(`[${this.instanceId}]: Problem when creating table`);
       throw new Error(err);
     }
   }
@@ -38,7 +40,7 @@ export default class EventDB {
             .DynamoDBAdapter;
           break;
         default:
-          this.logger.warn('No database type specified');
+          this.logger.warn(`[${this.instanceId}]: No database type specified`);
           throw new Error('No database type specified');
       }
       this.DBAdapter = new dbAdapter(this.logger);
@@ -58,7 +60,11 @@ export default class EventDB {
           reject(err);
         });
     });
-    promise.catch(() => this.logger.error('Failed Writing to Database')); // suppress unhandled rejection
+    promise.catch((err) =>
+      this.logger.error(
+        `[${this.instanceId}]: Failed Writing to Database! '${err}'`
+      )
+    );
     return promise;
   }
 }

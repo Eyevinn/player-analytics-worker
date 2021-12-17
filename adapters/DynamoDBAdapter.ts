@@ -5,6 +5,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   DeleteItemCommand,
+  AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 import winston from 'winston';
 import {
@@ -69,7 +70,9 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
   }
 
   async putItem(params: IDDBPutItemInput): Promise<void> {
-    const eventItem = {
+    const eventItem: {
+      [key: string]: AttributeValue;
+    } = {
       eventId: { S: uuidv4() },
     };
     Object.keys(params.data).forEach((key) => {
@@ -84,10 +87,9 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
         })
       );
       this.logger.debug(
-        `Put event with event ID:${eventItem.eventId['S']} in Table:${params.tableName}`
+        `Put JSON with event:${eventItem.event['S']}, eventId:${eventItem.eventId['S']} in Table:${params.tableName}`
       );
     } catch (err) {
-      this.logger.error(err);
       throw new Error(err);
     }
   }

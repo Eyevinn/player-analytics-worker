@@ -1,7 +1,6 @@
 import winston from 'winston';
 import EventDB from './lib/EventDB';
 import Queue from './lib/Queue';
-import Logger from './logging/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 require('dotenv').config();
@@ -26,11 +25,11 @@ export class Worker {
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
-    this.queue = new Queue(opts.logger);
-    this.db = new EventDB(opts.logger);
-    this.state = WorkerState.IDLE;
     this.tablePrefix = 'epas_';
     this.workerId = uuidv4();
+    this.state = WorkerState.IDLE;
+    this.queue = new Queue(opts.logger, this.workerId);
+    this.db = new EventDB(opts.logger, this.workerId);
   }
 
   async start() {
@@ -39,6 +38,7 @@ export class Worker {
 
     while (this.state === WorkerState.ACTIVE) {
       this.logger.info(`[${this.workerId}]: Worker is fetching from Queue...`);
+      let writePromises: PromiseSettledResult<any>[] = [];
       try {
         // ===Receive Queue Messages===
         const collectedMessages: any[] = await this.queue.receive();
@@ -50,11 +50,8 @@ export class Worker {
         }
 
         // ===Put Messages to DB===
-        let writePromises: any[] = [];
-        //  - New List with only event obj
         const allEvents: any[] =
           this.queue.getEventJSONsFromMessages(collectedMessages);
-
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
           const tableName: string = this.tablePrefix + eventJson.host;
@@ -73,9 +70,7 @@ export class Worker {
           writePromises.push(this.db.write(eventJson, tableName));
         }
         const writeResults = await Promise.allSettled(writePromises);
-
         // ===Remove Messages from Queue===
-        // - Only Messages that were not rejected
         const pushedMessages = collectedMessages.filter(
           (_, index) => writeResults[index].status !== 'rejected'
         );
