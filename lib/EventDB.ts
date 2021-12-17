@@ -57,12 +57,13 @@ export default class EventDB {
           resolve('Wrote to Table');
         })
         .catch((err) => {
-          reject(err);
+          const ErrorType = this.DBAdapter.DetermineErrorType(err);
+          reject({ errorType: ErrorType, message: err.message });
         });
     });
     promise.catch((err) =>
       this.logger.error(
-        `[${this.instanceId}]: Failed Writing to Database! '${err}'`
+        `[${this.instanceId}]: Failed Writing to Database! '${err.message}'`
       )
     );
     return promise;

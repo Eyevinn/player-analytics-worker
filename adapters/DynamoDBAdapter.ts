@@ -127,4 +127,17 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
   async getItemsBySession(params: any): Promise<any> {
     //TODO
   }
+
+  DetermineErrorType(errorObject: any) {
+    const errorName = errorObject.message.split(':').shift();
+    if (errorName) {
+      if (
+        errorName === 'ResourceNotFoundException' ||
+        errorName === 'ResourceInUseException'
+      ) {
+        return 'continue';
+      }
+    }
+    return 'abort';
+  }
 }

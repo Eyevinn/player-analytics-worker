@@ -42,13 +42,20 @@ export class Worker {
       try {
         // ===Receive Queue Messages===
         const collectedMessages: any[] = await this.queue.receive();
+        if (!Array.isArray(collectedMessages)) {
+          // Queue returned unexpected data.
+          this.logger.info(
+            `[${this.workerId}]: Received Error from Queue. Stopping Worker.`
+          );
+          this.state = WorkerState.INACTIVE;
+          continue;
+        }
         if (!collectedMessages || collectedMessages.length === 0) {
           this.logger.info(
             `[${this.workerId}]: Received No Messages from Queue. Going to Try Again`
           );
           continue;
         }
-
         // ===Put Messages to DB===
         const allEvents: any[] =
           this.queue.getEventJSONsFromMessages(collectedMessages);
@@ -83,6 +90,16 @@ export class Worker {
               `[${this.workerId}]: Error Removing from Queue!`,
               err
             );
+          }
+        });
+
+        // ===Should Abort?===
+        writeResults.map((result) => {
+          if (result.status === 'rejected') {
+            console.log(JSON.stringify(result, null, 2));
+            if (result.reason === 'abort') {
+              this.state = WorkerState.INACTIVE;
+            }
           }
         });
       } catch (err) {
