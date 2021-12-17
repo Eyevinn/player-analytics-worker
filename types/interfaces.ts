@@ -18,4 +18,5 @@ export abstract class AbstractDBAdapter {
   abstract getItem(params: Object): Promise<any>;
   abstract deleteItem(params: Object): Promise<void>;
   abstract getItemsBySession(params: Object): Promise<any>;
+  abstract getErrorType(error: any): string;
 }

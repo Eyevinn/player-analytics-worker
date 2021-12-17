@@ -128,7 +128,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
     //TODO
   }
 
-  DetermineErrorType(errorObject: any) {
+  getErrorType(errorObject: any) {
     const errorName = errorObject.message.split(':').shift();
     if (errorName) {
       if (
