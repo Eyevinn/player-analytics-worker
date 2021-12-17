@@ -57,8 +57,7 @@ export default class EventDB {
           resolve('Wrote to Table');
         })
         .catch((err) => {
-          const ErrorType = this.DBAdapter.getErrorType(err);
-          reject({ errorType: ErrorType, message: err.message });
+          reject(err);
         });
     });
     promise.catch((err) =>

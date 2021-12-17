@@ -96,7 +96,6 @@ export class Worker {
         // ===Should Abort?===
         writeResults.map((result) => {
           if (result.status === 'rejected') {
-            console.log(JSON.stringify(result, null, 2));
             if (result.reason === 'abort') {
               this.state = WorkerState.INACTIVE;
             }

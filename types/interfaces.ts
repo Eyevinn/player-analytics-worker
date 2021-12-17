@@ -8,6 +8,11 @@ export interface IDDBGetItemInput {
   tableName: string;
   eventId: string;
 }
+
+export interface IHandleErrorOutput {
+  errorType: string;
+  message: Object;
+}
 export abstract class AbstractDBAdapter {
   logger: winston.Logger;
   dbClient: any;
@@ -18,5 +23,5 @@ export abstract class AbstractDBAdapter {
   abstract getItem(params: Object): Promise<any>;
   abstract deleteItem(params: Object): Promise<void>;
   abstract getItemsBySession(params: Object): Promise<any>;
-  abstract getErrorType(error: any): string;
+  abstract handleError(error: any): IHandleErrorOutput;
 }

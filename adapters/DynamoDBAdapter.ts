@@ -12,6 +12,7 @@ import {
   AbstractDBAdapter,
   IDDBGetItemInput,
   IDDBPutItemInput,
+  IHandleErrorOutput,
 } from '../types/interfaces';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -69,7 +70,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
     }
   }
 
-  async putItem(params: IDDBPutItemInput): Promise<void> {
+  async putItem(params: IDDBPutItemInput): Promise<any> {
     const eventItem: {
       [key: string]: AttributeValue;
     } = {
@@ -90,7 +91,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
         `Put JSON with event:${eventItem.event['S']}, eventId:${eventItem.eventId['S']} in Table:${params.tableName}`
       );
     } catch (err) {
-      throw new Error(err);
+      throw this.handleError(err);
     }
   }
 
@@ -105,7 +106,7 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
       this.logger.debug('Read Item from Table');
       return rawData;
     } catch (err) {
-      this.logger.error(err);
+      throw this.handleError(err);
     }
   }
 
@@ -120,24 +121,32 @@ export class DynamoDBAdapter implements AbstractDBAdapter {
       this.logger.debug('Deleted Item from Table', data);
       return data;
     } catch (err) {
-      this.logger.error(err);
+      throw this.handleError(err);
     }
   }
 
   async getItemsBySession(params: any): Promise<any> {
-    //TODO
+    try {
+      // TODO
+    } catch (err) {
+      throw this.handleError(err);
+    }
   }
 
-  getErrorType(errorObject: any) {
-    const errorName = errorObject.message.split(':').shift();
-    if (errorName) {
+  handleError(errorObject: any): IHandleErrorOutput {
+    this.logger.error(errorObject);
+    const response: IHandleErrorOutput = {
+      errorType: 'abort',
+      message: errorObject,
+    };
+    if (errorObject.name) {
       if (
-        errorName === 'ResourceNotFoundException' ||
-        errorName === 'ResourceInUseException'
+        errorObject.name === 'ResourceNotFoundException' ||
+        errorObject.name === 'ResourceInUseException'
       ) {
-        return 'continue';
+        response['errorType'] = 'continue';
       }
     }
-    return 'abort';
+    return response;
   }
 }
