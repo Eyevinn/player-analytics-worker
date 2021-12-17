@@ -8,7 +8,6 @@ require('dotenv').config();
 
 export interface IWorkerOptions {
   logger: winston.Logger;
-  max?: any;
 }
 
 export enum WorkerState {
@@ -77,10 +76,10 @@ export class Worker {
 
         // ===Remove Messages from Queue===
         // - Only Messages that were not rejected
-        const filtered = collectedMessages.filter(
+        const pushedMessages = collectedMessages.filter(
           (_, index) => writeResults[index].status !== 'rejected'
         );
-        filtered.forEach(async (message) => {
+        pushedMessages.forEach(async (message) => {
           try {
             await this.queue.remove(message);
             this.logger.info(`[${this.workerId}]: Removed message from Queue!`);
