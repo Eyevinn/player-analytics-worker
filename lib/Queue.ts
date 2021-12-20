@@ -1,8 +1,9 @@
+import { AbstractQueueAdapter } from '@eyevinn/player-analytics-shared/types/interfaces';
 import winston from 'winston';
 
 export default class Queue {
   logger: winston.Logger;
-  QueueAdapter: any;
+  QueueAdapter: AbstractQueueAdapter;
   instanceId: string;
 
   constructor(logger: winston.Logger, id: string) {
@@ -50,7 +51,7 @@ export default class Queue {
     }
   }
 
-  public getEventJSONsFromMessages(messages: any[]): Object[] {
+  public getEventJSONsFromMessages(messages: any[]): any[] {
     return this.QueueAdapter.getEventJSONsFromMessages(messages);
   }
 }

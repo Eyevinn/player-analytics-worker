@@ -1,8 +1,9 @@
 import winston from 'winston';
+import { AbstractDBAdapter } from '../types/interfaces';
 
 export default class EventDB {
   logger: winston.Logger;
-  DBAdapter: any;
+  DBAdapter: AbstractDBAdapter;
   tableNamesCache: string[];
   instanceId: string;
 
@@ -35,9 +36,8 @@ export default class EventDB {
     if (this.DBAdapter === undefined) {
       let dbAdapter: any;
       switch (process.env.DB_TYPE) {
-        case 'dynamodb':
-          dbAdapter = (await import('../adapters/DynamoDBAdapter'))
-            .DynamoDBAdapter;
+        case 'DYNAMODB':
+          dbAdapter = (await import('@eyevinn/player-analytics-shared')).DynamoDBAdapter;
           break;
         default:
           this.logger.warn(`[${this.instanceId}]: No database type specified`);
@@ -60,10 +60,8 @@ export default class EventDB {
           reject(err);
         });
     });
-    promise.catch((err) =>
-      this.logger.error(
-        `[${this.instanceId}]: Failed Writing to Database! '${err.message}'`
-      )
+    promise.catch((exc) =>
+      this.logger.error(`[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`)
     );
     return promise;
   }

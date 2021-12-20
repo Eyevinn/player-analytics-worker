@@ -9,5 +9,4 @@ for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
   myWorkers.push(new Worker({ logger: Logger }));
 }
 // Make them work!
-myWorkers.map((worker) => worker.start());
-
+myWorkers.map((worker) => worker.startAsync());
