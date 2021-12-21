@@ -11,7 +11,7 @@ export default class Queue {
     this.instanceId = id;
   }
 
-  private async _getQueueAdapter(): Promise<void> {
+  private async getQueueAdapter(): Promise<void> {
     if (this.QueueAdapter === undefined) {
       let queueAdapter: any;
       switch (process.env.QUEUE_TYPE) {
@@ -29,7 +29,7 @@ export default class Queue {
 
   public async receive(): Promise<Object> {
     try {
-      await this._getQueueAdapter();
+      await this.getQueueAdapter();
       const queueResponse = await this.QueueAdapter.pullFromQueue();
       return queueResponse;
     } catch (err) {
@@ -40,7 +40,7 @@ export default class Queue {
 
   public async remove(queueMessageObject: Object): Promise<Object> {
     try {
-      await this._getQueueAdapter();
+      await this.getQueueAdapter();
       const queueuResponse = await this.QueueAdapter.removeFromQueue(
         queueMessageObject
       );

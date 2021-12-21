@@ -14,7 +14,7 @@ export default class EventDB {
   }
 
   public async TableExists(tableName: string): Promise<boolean> {
-    await this._getDBAdapter();
+    await this.getDBAdapter();
     // - If cache does not have the requested table name. Update cache, it might be there.
     if (!this.tableNamesCache.includes(tableName)) {
       this.logger.info(`[${this.instanceId}]: Updating tableNames cache`);
@@ -32,7 +32,7 @@ export default class EventDB {
     }
   }
 
-  private async _getDBAdapter(): Promise<void> {
+  private async getDBAdapter(): Promise<void> {
     if (this.DBAdapter === undefined) {
       let dbAdapter: any;
       switch (process.env.DB_TYPE) {

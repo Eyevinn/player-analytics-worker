@@ -20,7 +20,6 @@ export class Worker {
   db: any;
   state: string;
   workerId: string;
-  tenant: string;
   tablePrefix: string;
   iterations: number;
 
