@@ -1,38 +1,38 @@
 const valid_events = [
   {
-    event: 'init',
-    sessionId: '', // if not provided the server MUST generate it
+    event: "init",
+    sessionId: "", // if not provided the server MUST generate it
     heartbeatInterval: 30, // if not provided the server MUST generate it
     timestamp: -1,
     playhead: -1, // if the player has an expected startTime, eg. if user continues watches a movie, use that value here.
     duration: -1,
     payload: {
       live: false,
-      contentId: '',
-      contentUrl: '',
-      drmType: '',
-      userId: '',
-      deviceId: '',
-      deviceModel: '',
-      deviceType: '',
+      contentId: "",
+      contentUrl: "",
+      drmType: "",
+      userId: "",
+      deviceId: "",
+      deviceModel: "",
+      deviceType: "",
     },
   },
   {
-    event: 'heartbeat',
-    sessionId: '123-1231233-123',
+    event: "heartbeat",
+    sessionId: "123-1231233-123",
     timestamp: 0,
     playhead: 0,
     duration: 0,
     payload: {
       events: [
         {
-          event: 'loading',
+          event: "loading",
           timestamp: 0,
           playhead: 0,
           duration: 0,
         },
         {
-          event: 'loaded',
+          event: "loaded",
           timestamp: 0,
           playhead: 0,
           duration: 0,
@@ -41,61 +41,61 @@ const valid_events = [
     },
   },
   {
-    event: 'loading',
+    event: "loading",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'loaded',
+    event: "loaded",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'play',
+    event: "play",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'pause',
+    event: "pause",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'resume',
+    event: "resume",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'buffering',
+    event: "buffering",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'buffered',
+    event: "buffered",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'seeking',
+    event: "seeking",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'seeked',
+    event: "seeked",
     timestamp: 0,
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'bitrate_changed',
+    event: "bitrate_changed",
     timestamp: 0,
     playhead: 0,
     duration: 0,
@@ -108,22 +108,22 @@ const valid_events = [
     },
   },
   {
-    event: 'stopped',
-    sessionId: '123-214-234',
+    event: "stopped",
+    sessionId: "123-214-234",
     timestamp: 0,
     playhead: 0,
     duration: 0,
     payload: {
-      reason: 'ended', // eg. "ended", "aborted", "error"
+      reason: "ended", // eg. "ended", "aborted", "error"
       events: [
         {
-          event: 'seeked',
+          event: "seeked",
           timestamp: 0,
           playhead: 0,
           duration: 0,
         },
         {
-          event: 'seeking',
+          event: "seeking",
           timestamp: 0,
           playhead: 0,
           duration: 0,
@@ -132,26 +132,26 @@ const valid_events = [
     },
   },
   {
-    event: 'error',
+    event: "error",
     timestamp: 0,
     playhead: 0,
     duration: 0,
     payload: {
-      category: 'NETWORK', // eg. NETWORK, DECODER, etc.
-      code: '',
-      message: 'Network Error',
+      category: "NETWORK", // eg. NETWORK, DECODER, etc.
+      code: "",
+      message: "Network Error",
       data: {},
     },
   },
   {
-    event: 'warning',
+    event: "warning",
     timestamp: 0,
     playhead: 0,
     duration: 0,
     payload: {
-      category: 'NETWORK', // eg. NETWORK, DECODER, osv.
-      code: '404',
-      message: 'Network Error',
+      category: "NETWORK", // eg. NETWORK, DECODER, osv.
+      code: "404",
+      message: "Network Error",
       data: {},
     },
   },
@@ -159,33 +159,33 @@ const valid_events = [
 
 const invalid_events = [
   {
-    event: 'init',
+    event: "init",
     payload: {
       live: false,
-      contentId: '',
-      contentUrl: '',
-      drmType: '',
-      userId: '',
-      deviceId: '',
-      deviceModel: '',
-      deviceType: '',
+      contentId: "",
+      contentUrl: "",
+      drmType: "",
+      userId: "",
+      deviceId: "",
+      deviceModel: "",
+      deviceType: "",
     },
   },
   {
-    event: 'heartbeat',
+    event: "heartbeat",
     timestamp: 0,
     playhead: 0,
     duration: 0,
     payload: {
       events: [
         {
-          event: 'loading',
+          event: "loading",
           timestamp: 0,
           playhead: 0,
           duration: 0,
         },
         {
-          event: 'loaded',
+          event: "loaded",
           timestamp: 0,
           playhead: 0,
           duration: 0,
@@ -194,72 +194,72 @@ const invalid_events = [
     },
   },
   {
-    event: 'loading',
+    event: "loading",
     timestamp: 0,
     duration: 0,
   },
   {
-    event: 'loaded',
+    event: "loaded",
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'play',
+    event: "play",
     timestamp: 0,
   },
   {
-    event: 'pause',
+    event: "pause",
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'resume',
+    event: "resume",
     timestamp: 0,
     duration: 0,
   },
   {
-    event: 'buffering',
+    event: "buffering",
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'buffered',
+    event: "buffered",
     timestamp: 0,
     playhead: 0,
   },
   {
-    event: 'seeking',
+    event: "seeking",
     playhead: 0,
     duration: 0,
   },
   {
-    event: 'seeked',
+    event: "seeked",
   },
   {
-    event: 'bitrate_changed',
+    event: "bitrate_changed",
     timestamp: 0,
     duration: 0,
     payload: {},
   },
   {
-    event: 'stopped',
-    sessionId: '123-214-234',
+    event: "stopped",
+    sessionId: "123-214-234",
     duration: 0,
     playhead: 0,
     payload: {},
   },
   {
-    event: 'error',
+    event: "error",
   },
   {
-    event: 'warning',
-    timestamp: '',
+    event: "warning",
+    timestamp: "",
     playhead: 0,
     duration: 0,
     payload: {
-      category: 'NETWORK', // eg. NETWORK, DECODER, osv.
-      code: '404',
-      message: 'Network Error',
+      category: "NETWORK", // eg. NETWORK, DECODER, osv.
+      code: "404",
+      message: "Network Error",
       data: {},
     },
   },

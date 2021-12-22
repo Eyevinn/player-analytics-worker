@@ -77,6 +77,9 @@ web_modules/
 # npm user config
 .npmrc
 
+# prettier user config
+.prettierrc
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
