@@ -19,6 +19,12 @@ export default class Queue {
           queueAdapter = (await import('@eyevinn/player-analytics-shared'))
             .SqsQueueAdapter;
           break;
+        case 'beanstalkd':
+          queueAdapter = (await import('@eyevinn/player-analytics-shared')).BeanstalkdAdapter;
+          break;
+        case 'redis':
+          queueAdapter = (await import('@eyevinn/player-analytics-shared')).RedisAdapter;
+          break;
         default:
           this.logger.warn(`[${this.instanceId}]: No queue type specified`);
           throw new Error('No queue type specified');
@@ -41,10 +47,10 @@ export default class Queue {
   public async remove(queueMessageObject: Object): Promise<Object> {
     try {
       await this.getQueueAdapter();
-      const queueuResponse = await this.QueueAdapter.removeFromQueue(
+      const queueResponse = await this.QueueAdapter.removeFromQueue(
         queueMessageObject
       );
-      return queueuResponse;
+      return queueResponse;
     } catch (err) {
       this.logger.error(`[${this.instanceId}]: ${err}`);
       throw new Error(err);

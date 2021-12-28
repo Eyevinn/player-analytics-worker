@@ -126,3 +126,4 @@ dist
 # build files
 build/
 *.zip
+test.ts
