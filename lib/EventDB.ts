@@ -39,6 +39,9 @@ export default class EventDB {
         case 'DYNAMODB':
           dbAdapter = (await import('@eyevinn/player-analytics-shared')).DynamoDBAdapter;
           break;
+        case 'MONGODB':
+          dbAdapter = (await import('@eyevinn/player-analytics-shared')).MongoDBAdapter;
+          break;
         default:
           this.logger.warn(`[${this.instanceId}]: No database type specified`);
           throw new Error('No database type specified');

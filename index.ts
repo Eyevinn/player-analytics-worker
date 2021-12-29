@@ -41,28 +41,24 @@ export class Worker {
 
   async startAsync() {
     this.state = WorkerState.ACTIVE;
-    this.logger.info(`[${this.workerId}]: Worker is Active...`);
+    this.logger.debug(`[${this.workerId}]: Worker is Active...`);
 
     while (this.state === WorkerState.ACTIVE) {
       // For Unit tests
       if (this.iterations > 0) this.iterations--;
       if (this.iterations === 0) this.state = WorkerState.INACTIVE;
 
-      this.logger.info(`[${this.workerId}]: Worker is fetching from Queue...`);
+      this.logger.debug(`[${this.workerId}]: Worker is fetching from Queue...`);
       let writePromises: PromiseSettledResult<any>[] = [];
       try {
         const collectedMessages: any[] = await this.queue.receive();
         if (!Array.isArray(collectedMessages)) {
-          this.logger.info(
-            `[${this.workerId}]: Received Error from Queue. Stopping Worker.`
-          );
+          this.logger.warn(`[${this.workerId}]: Received Error from Queue. Stopping Worker.`);
           this.state = WorkerState.INACTIVE;
           continue;
         }
         if (!collectedMessages || collectedMessages.length === 0) {
-          this.logger.info(
-            `[${this.workerId}]: Received No Messages from Queue. Going to Try Again`
-          );
+          this.logger.debug(`[${this.workerId}]: Received No Messages from Queue. Going to Try Again`);
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
@@ -90,17 +86,15 @@ export class Worker {
           const message = pushedMessages[i];
           try {
             await this.queue.remove(message);
-            this.logger.info(`[${this.workerId}]: Removed message from Queue!`);
+            this.logger.debug(`[${this.workerId}]: Removed message from Queue!`);
           } catch (err) {
-            this.logger.error(`[${this.workerId}]: Error Removing from Queue!`, err);
+            this.logger.error(`[${this.workerId}]: Error Removing item from Queue!`, err);
           }
         }
 
         writeResults.map((result) => {
-          if (result.status === 'rejected') {
-            if (result.reason === 'abort') {
-              this.state = WorkerState.INACTIVE;
-            }
+          if (result.status === 'rejected' && result.reason === 'abort') {
+            this.state = WorkerState.INACTIVE;
           }
         });
       } catch (err) {
