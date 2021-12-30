@@ -6,7 +6,7 @@
   "scripts": {
     "test": "ts-node node_modules/jasmine/bin/jasmine",
     "build": "tsc -p tsconfig-build.json",
-    "dev": "node build/dev.js"
+    "start": "node build/dev.js"
   },
   "repository": {
     "type": "git",
