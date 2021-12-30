@@ -3,3 +3,4 @@ SQS_QUEUE_URL = <your-SQS-queue-url>
 QUEUE_TYPE = <SQS | beanstalkd | redis>
 AWS_REGION = <your-aws-region>
 DB_TYPE = <DYNAMODB | MONGODB>
+NUMBER_OF_WORKERS = <number-of-workers>
