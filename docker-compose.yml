@@ -15,6 +15,6 @@ services:
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}
       - QUEUE_TYPE=SQS
       - DB_TYPE=DYNAMODB
-      - NUMBER_OF_WORKERS=2
+      - NUMBER_OF_WORKERS=${NUMBER_OF_WORKERS}
     networks:
       - epas-internal
