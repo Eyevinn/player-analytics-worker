@@ -11,7 +11,8 @@ ARG NPM_GITHUB_TOKEN \
     NUMBER_OF_WORKERS=2 \
     AWS_ACCESS_KEY_ID \
     AWS_SECRET_ACCESS_KEY \
-    AWS_REGION=eu-north-1
+    AWS_REGION=eu-north-1 \
+    NODE_ENV=development
 
 # This is needed for installing private github packages
 RUN echo //npm.pkg.github.com/:_authToken=$NPM_GITHUB_TOKEN >> ~/.npmrc
@@ -27,7 +28,7 @@ ENV SQS_QUEUE_URL=$SQS_QUEUE_URL \
     AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
     AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
     AWS_REGION=$AWS_REGION \
-    NODE_ENV=development
+    NODE_ENV=$NODE_ENV
 
 RUN npm run build
 
