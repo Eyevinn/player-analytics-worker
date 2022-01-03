@@ -17,14 +17,13 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-        always-auth: true
-        registry-url: https://npm.pkg.github.com
-        scope: eyevinn
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: npm install and test
       run: |
+        touch .npmrc
+        echo @eyevinn:registry=https://npm.pkg.github.com >> .npmrc
+        echo //npm.pkg.github.com/:_authToken=${NPM_GITHUB_TOKEN} >> .npmrc
         npm ci
         npm test
       env:
         CI: true
+        NPM_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
