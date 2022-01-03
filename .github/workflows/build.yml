@@ -39,4 +39,4 @@ jobs:
           registry: ${{ steps.login-ecr.outputs.registry }}
           dockerfile: Dockerfile
           buildArgs: 
-            NPM_GITHUB_TOKEN: ${{ secrets.NPM_GITHUB_TOKEN }}
+            - NPM_GITHUB_TOKEN=${{ secrets.NPM_GITHUB_TOKEN }}
