@@ -5,13 +5,15 @@ networks:
 
 services:
   epas-worker:
-    build: .
+    build:
+      context: .
+      args:
+        NPM_GITHUB_TOKEN: ${NPM_GITHUB_TOKEN}
     image: epas-worker
     environment:
       - AWS_REGION=${AWS_REGION}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - PUBLISH_PACKAGES=${PUBLISH_PACKAGES}
       - SQS_QUEUE_URL=${SQS_QUEUE_URL}
       - QUEUE_TYPE=SQS
       - DB_TYPE=DYNAMODB

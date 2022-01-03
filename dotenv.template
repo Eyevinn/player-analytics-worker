@@ -1,4 +1,4 @@
-PUBLISH_PACKAGES = <your-github-token>
+NPM_GITHUB_TOKEN = <your-github-token>
 SQS_QUEUE_URL = <your-SQS-queue-url>
 QUEUE_TYPE = <SQS | beanstalkd | redis>
 AWS_REGION = <your-aws-region>
