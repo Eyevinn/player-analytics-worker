@@ -21,9 +21,9 @@ jobs:
       run: |
         touch .npmrc
         echo @eyevinn:registry=https://npm.pkg.github.com >> .npmrc
-        echo //npm.pkg.github.com/:_authToken=${NPM_GITHUB_TOKEN} >> .npmrc
+        echo //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN} >> .npmrc
         npm ci
         npm test
       env:
         CI: true
-        NPM_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_GITHUB_TOKEN }}
