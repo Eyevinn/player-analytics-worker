@@ -9,14 +9,13 @@ services:
       context: .
       args:
         NPM_GITHUB_TOKEN: ${NPM_GITHUB_TOKEN}
+        SQS_QUEUE_URL: ${SQS_QUEUE_URL}
+        QUEUE_TYPE: ${QUEUE_TYPE}
+        DB_TYPE: ${DB_TYPE}
+        NUMBER_OF_WORKERS: ${NUMBER_OF_WORKERS}
+        AWS_REGION: ${AWS_REGION}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     image: epas-worker
-    environment:
-      - AWS_REGION=${AWS_REGION}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
-      - QUEUE_TYPE=SQS
-      - DB_TYPE=DYNAMODB
-      - NUMBER_OF_WORKERS=${NUMBER_OF_WORKERS}
     networks:
       - epas-internal
