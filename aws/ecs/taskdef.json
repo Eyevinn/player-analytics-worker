@@ -1,0 +1,53 @@
+{
+    "family": "epas-worker",
+    "networkMode": "awsvpc",
+    "executionRoleArn": "arn:aws:iam::590877988961:role/ecsTaskExecutionRole",
+    "taskRoleArn": "arn:aws:iam::590877988961:role/epas-worker-role",
+    "containerDefinitions": [
+      {
+        "name": "epas-worker",
+        "image": "590877988961.dkr.ecr.eu-north-1.amazonaws.com/epas/worker:latest",
+        "essential": true,
+        "logConfiguration": {
+          "logDriver": "awslogs",
+          "options": {
+            "awslogs-group": "/ecs/epas-worker",
+            "awslogs-region": "eu-north-1",
+            "awslogs-stream-prefix": "ecs"
+          }
+        },
+        "portMappings": [],
+        "environment": [
+          {
+            "name": "AWS_REGION",
+            "value": "eu-north-1"
+          },
+          {
+            "name": "DB_TYPE",
+            "value": "DYNAMODB"
+          },
+          {
+            "name": "NODE_ENV",
+            "value": "development"
+          },
+          {
+            "name": "QUEUE_TYPE",
+            "value": "SQS"
+          },
+          {
+            "name": "SQS_QUEUE_URL",
+            "value": "https://sqs.eu-north-1.amazonaws.com/590877988961/epas-dev"
+          }
+        ]
+      }
+    ],
+    "requiresCompatibilities": [
+      "FARGATE"
+    ],
+    "runtimePlatform": {
+      "operatingSystemFamily": "LINUX",
+      "cpuArchitecture": null
+    },
+    "cpu": "256",
+    "memory": "512"
+}
