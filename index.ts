@@ -53,8 +53,7 @@ export class Worker {
       try {
         const collectedMessages: any[] = await this.queue.receive();
         if (!Array.isArray(collectedMessages)) {
-          this.logger.warn(`[${this.workerId}]: Received Error from Queue. Stopping Worker.`);
-          this.state = WorkerState.INACTIVE;
+          this.logger.warn(`[${this.workerId}]: Error collecting messages from queue`);
           continue;
         }
         if (!collectedMessages || collectedMessages.length === 0) {
@@ -70,10 +69,7 @@ export class Worker {
             try {
               await this.db.createTable(tableName);
             } catch (err) {
-              this.logger.error(
-                `[${this.workerId}]: Failed to create table '${tableName}'`,
-                err
-              );
+              this.logger.error(`[${this.workerId}]: Failed to create table '${tableName}'`, err);
             }
           }
           writePromises.push(this.db.write(eventJson, tableName));
@@ -98,10 +94,7 @@ export class Worker {
           }
         });
       } catch (err) {
-        this.logger.error(
-          `[${this.workerId}]: Stopping Worker! Unexpected Error: ${err}`
-        );
-        this.state = WorkerState.INACTIVE;
+        this.logger.error(`[${this.workerId}]: Error: ${err}`);
       }
     }
   }

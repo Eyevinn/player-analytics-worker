@@ -2,9 +2,9 @@
 
 ## Setup
 
-To be able to build and run the project locally a things need to be set first.
+To be able to build and run the project locally a few things need to be set first.
 
-- A `.npmrc` file is needed with the following content:
+- `.npmrc` file is needed with the following content:
 
 ``` txt
 @eyevinn:registry=https://npm.pkg.github.com
