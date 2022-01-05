@@ -65,13 +65,6 @@ export class Worker {
           const eventJson = allEvents[i];
           const tableName: string = this.tablePrefix + eventJson.host;
           const result: boolean = await this.db.TableExists(tableName);
-          if (!result) {
-            try {
-              await this.db.createTable(tableName);
-            } catch (err) {
-              this.logger.error(`[${this.workerId}]: Failed to create table '${tableName}'`, err);
-            }
-          }
           writePromises.push(this.db.write(eventJson, tableName));
         }
         const writeResults = await Promise.allSettled(writePromises);

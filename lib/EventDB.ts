@@ -19,11 +19,15 @@ export default class EventDB {
       // - If cache does not have the requested table name. Update cache, it might be there.
       if (!this.tableNamesCache.includes(tableName)) {
         this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
-        this.tableNamesCache = await this.DBAdapter.getTableNames();
+        await this.createTable(tableName);
       }
     } catch (err) {
-      this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
-      throw new Error(err);
+      if (JSON.stringify(err).indexOf('ResourceInUseException')) {
+        this.tableNamesCache.push(tableName);
+      } else {
+        this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
+        throw new Error(err);
+      }
     }
     return this.tableNamesCache.includes(tableName);
   }
