@@ -15,10 +15,15 @@ export default class EventDB {
 
   public async TableExists(tableName: string): Promise<boolean> {
     await this.getDBAdapter();
-    // - If cache does not have the requested table name. Update cache, it might be there.
-    if (!this.tableNamesCache.includes(tableName)) {
-      this.logger.info(`[${this.instanceId}]: Updating tableNames cache`);
-      this.tableNamesCache = await this.DBAdapter.getTableNames();
+    try {
+      // - If cache does not have the requested table name. Update cache, it might be there.
+      if (!this.tableNamesCache.includes(tableName)) {
+        this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
+        this.tableNamesCache = await this.DBAdapter.getTableNames();
+      }
+    } catch (err) {
+      this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
+      throw new Error(err);
     }
     return this.tableNamesCache.includes(tableName);
   }
@@ -27,7 +32,7 @@ export default class EventDB {
     try {
       await this.DBAdapter.createTable(name);
     } catch (err) {
-      this.logger.warn(`[${this.instanceId}]: Problem when creating table`);
+      this.logger.error(`[${this.instanceId}]: Failed to create table '${name}'!`);
       throw new Error(err);
     }
   }
