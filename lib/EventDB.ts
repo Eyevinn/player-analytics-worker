@@ -20,6 +20,7 @@ export default class EventDB {
       if (!this.tableNamesCache.includes(tableName)) {
         this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
         await this.createTable(tableName);
+        this.tableNamesCache.push(tableName);
       }
     } catch (err) {
       if (JSON.stringify(err).indexOf('ResourceInUseException')) {
