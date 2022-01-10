@@ -15,15 +15,13 @@ export default class EventDB {
   public async TableExists(tableName: string): Promise<boolean> {
     await this.getDBAdapter();
     try {
-      // - If cache does not have the requested table name. Update cache, it might be there.
       if (!this.tableNamesCache.includes(tableName)) {
-        this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
-        const doesExist = await this.DBAdapter.tableExists(tableName); // <-- New method
+        const doesExist = await this.DBAdapter.tableExists(tableName);
         if (!doesExist) {
-          return false; // <-- Returning false here will prompt a table creation call outside 
+          return false;
         }
-        // update cache
-        this.tableNamesCache.push(tableName); 
+        this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
+        this.tableNamesCache.push(tableName);
       }
       return true;
     } catch (err) {
@@ -64,7 +62,9 @@ export default class EventDB {
         });
     });
     promise.catch((exc) =>
-      this.logger.error(`[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`)
+      this.logger.error(
+        `[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`
+      )
     );
     return promise;
   }

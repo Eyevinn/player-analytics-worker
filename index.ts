@@ -2,6 +2,7 @@ import winston from 'winston';
 import EventDB from './lib/EventDB';
 import Queue from './lib/Queue';
 import { v4 as uuidv4 } from 'uuid';
+//import { TABLE_PREFIX } from '@eyevinn/player-analytics-shared/util/constants';
 
 require('dotenv').config();
 
@@ -60,7 +61,7 @@ export class Worker {
       if (this.iterations === 0) this.state = WorkerState.INACTIVE;
 
       this.logger.debug(`[${this.workerId}]: Worker is fetching from Queue...`);
-      let writePromises: PromiseSettledResult<any>[] = [];
+      const writePromises: PromiseSettledResult<any>[] = [];
       try {
         const collectedMessages: any[] = await this.queue.receive();
         if (!Array.isArray(collectedMessages)) {
@@ -72,14 +73,15 @@ export class Worker {
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
-        let validMessages: any[] = [];
+        const validMessages: any[] = [];
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
           const tableName: string = this.tablePrefix + eventJson.host;
           const result: boolean = await this.db.TableExists(tableName);
           if (!result) {
+            this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
             if (Date.now() - eventJson.timestamp > this.maxAge) {
-              this.logger.warn(`[${this.workerId}]: Event has expired due to non existent table. Removing event from queue`);
+              this.logger.warn(`[${this.workerId}]: Event has expired. Removing event from queue`);
               this.removeFromQueue(collectedMessages[i]);
             }
             continue;
