@@ -22,6 +22,7 @@ export class Worker {
   workerId: string;
   tablePrefix: string;
   iterations: number;
+  maxAge: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -31,12 +32,22 @@ export class Worker {
     this.state = WorkerState.IDLE;
     this.queue = new Queue(opts.logger, this.workerId);
     this.db = new EventDB(opts.logger, this.workerId);
+    this.maxAge = process.env.MAX_AGE ? parseInt(process.env.MAX_AGE) : 60000;
   }
 
   // For unit tests only
   setLoopIterations(iterations: number) {
     this.logger.warn(`[${this.workerId}]: Setting worker iterations to: ${iterations}`);
     this.iterations = iterations;
+  }
+
+  private async removeFromQueue(message: any) {
+    try {
+      await this.queue.remove(message);
+      this.logger.debug(`[${this.workerId}]: Removed message from Queue!`);
+    } catch (err) {
+      this.logger.error(`[${this.workerId}]: Error Removing item from Queue!`, err);
+    }
   }
 
   async startAsync() {
@@ -61,24 +72,27 @@ export class Worker {
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
+        let validMessages: any[] = [];
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
           const tableName: string = this.tablePrefix + eventJson.host;
           const result: boolean = await this.db.TableExists(tableName);
+          if (!result) {
+            if (Date.now() - eventJson.timestamp > this.maxAge) {
+              this.logger.warn(`[${this.workerId}]: Event has expired due to non existent table. Removing event from queue`);
+              this.removeFromQueue(collectedMessages[i]);
+            }
+            continue;
+          }
+          validMessages.push(collectedMessages[i]);
           writePromises.push(this.db.write(eventJson, tableName));
         }
         const writeResults = await Promise.allSettled(writePromises);
-        const pushedMessages = collectedMessages.filter(
+        const pushedMessages = validMessages.filter(
           (_, index) => writeResults[index].status !== 'rejected'
         );
         for (let i = 0; i < pushedMessages.length; i++) {
-          const message = pushedMessages[i];
-          try {
-            await this.queue.remove(message);
-            this.logger.debug(`[${this.workerId}]: Removed message from Queue!`);
-          } catch (err) {
-            this.logger.error(`[${this.workerId}]: Error Removing item from Queue!`, err);
-          }
+          this.removeFromQueue(pushedMessages[i]);
         }
 
         writeResults.map((result) => {

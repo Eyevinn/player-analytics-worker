@@ -4,3 +4,4 @@ QUEUE_TYPE = <SQS | beanstalkd | redis>
 AWS_REGION = <your-aws-region>
 DB_TYPE = <DYNAMODB | MONGODB>
 NUMBER_OF_WORKERS = <number-of-workers>
+MAX_AGE = <max-age-of-message-in-milliseconds>
