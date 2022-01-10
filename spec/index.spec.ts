@@ -5,6 +5,8 @@ import {
   DynamoDBClient,
   GetItemCommand,
   DeleteItemCommand,
+  DescribeTableCommand,
+  DescribeTableCommandOutput,
   AttributeValue,
   CreateTableCommandOutput,
   PutItemCommandOutput,
@@ -33,6 +35,7 @@ let deleteMsgReply: DeleteMessageCommandOutput;
 let listTableReply: ListTablesCommandOutput;
 let createTableReply: CreateTableCommandOutput;
 let putItemReply: PutItemCommandOutput;
+let describeTableReply: DescribeTableCommandOutput;
 
 describe('A Worker', () => {
   beforeEach(() => {
@@ -90,6 +93,15 @@ describe('A Worker', () => {
         requestId: '123-123-abc-abc',
       },
     };
+    describeTableReply = {
+      $metadata: {
+        requestId: '123-123-abc-abc',
+        httpStatusCode: 200,
+      },
+      Table: {
+        TableStatus: 'ACTIVE',
+      },
+    };
   });
 
   afterEach(() => {
@@ -106,7 +118,6 @@ describe('A Worker', () => {
 
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyCreateTable = spyOn(EventDB.prototype, 'createTable').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
@@ -118,15 +129,13 @@ describe('A Worker', () => {
 
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
-    ddbMock.on(CreateTableCommand).resolves(createTableReply);
     ddbMock.on(PutItemCommand).resolves(putItemReply);
-    ddbMock.on(ListTablesCommand).resolves(listTableReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
     testWorker.setLoopIterations(1);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
-    expect(spyCreateTable).toHaveBeenCalledWith('epas_mock.tenant.one');
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).toHaveBeenCalled();
@@ -135,7 +144,6 @@ describe('A Worker', () => {
   // Try Again if messages = 0
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyCreateTable = spyOn(EventDB.prototype, 'createTable').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
@@ -147,27 +155,91 @@ describe('A Worker', () => {
 
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply.shift());
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
-    ddbMock.on(CreateTableCommand).resolves(createTableReply);
     ddbMock.on(PutItemCommand).resolves(putItemReply);
-    ddbMock.on(ListTablesCommand).resolves(listTableReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
     testWorker.setLoopIterations(2);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
-    expect(spyCreateTable).toHaveBeenCalledWith('epas_mock.tenant.one');
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).toHaveBeenCalled();
   });
 
-  xit('should not try to create a table if it already have been created', async () => {
-    listTableReply = {
+  it('should not push item to DB if target table does not exist', async () => {
+    const itemReply: AwsError = {
+      Type: 'Sender',
+      Code: 'ResourceNotFoundException',
+      name: 'ResourceNotFoundException',
+      message: 'Requested resource not found',
+      $fault: 'client',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'df840ab9-e68b-5c0e-b4a0-5094f2dfaee8',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    };
+    const recieveMessageReply = {
       $metadata: {},
-      TableNames: ['epas_mock.tenant.one'],
+      Messages: [
+        {
+          MessageId: '62686810-05ba-4b43-62730ff3156g7jd3',
+          ReceiptHandle:
+            'MbZj6wDWli+JvwwJaBV+3dcjk2YW2vA3' +
+            '+STFFljTM8tJJg6HRG6PYSasuWXPJB+C' +
+            'wLj1FjgXUv1uSj1gUPAWV66FU/WeR4mq' +
+            '2OKpEGYWbnLmpRCJVAyeMjeU5ZBdtcQ+' +
+            'QEauMZc8ZRv37sIW2iJKq3M9MFx1YvV11A2x/KSbkJ0=',
+          MD5OfBody: 'fafb00f5732ab283681e124bf8747ed1',
+          Body: JSON.stringify({
+            event: 'loading',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 0,
+            host: 'mock.tenant.one',
+          }),
+        },
+      ],
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyCreateTable = spyOn(EventDB.prototype, 'createTable').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyGetEvent = spyOn(
+      Queue.prototype,
+      'getEventJSONsFromMessages'
+    ).and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => recieveMessageReply);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(DescribeTableCommand).rejects(itemReply);
+    // Test the Worker
+    testWorker.setLoopIterations(1);
+    await testWorker.startAsync();
+
+    expect(spyTableExists).toHaveBeenCalled();
+    expect(spyWrite).not.toHaveBeenCalled();
+    expect(spyGetEvent).toHaveBeenCalled();
+    expect(spyRemove).not.toHaveBeenCalled();
+  });
+
+  it('should remove item from queue if it has expired and the target table does not exist', async () => {
+    const itemReply: AwsError = {
+      Type: 'Sender',
+      Code: 'ResourceNotFoundException',
+      name: 'ResourceNotFoundException',
+      message: 'Requested resource not found',
+      $fault: 'client',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'df840ab9-e68b-5c0e-b4a0-5094f2dfaee8',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    };
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
@@ -178,22 +250,19 @@ describe('A Worker', () => {
     const testWorker = new Worker({ logger: Logger });
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
-    ddbMock.on(PutItemCommand).resolves(putItemReply);
-    ddbMock.on(ListTablesCommand).resolves(listTableReply);
+    ddbMock.on(DescribeTableCommand).rejects(itemReply);
     // Test the Worker
     testWorker.setLoopIterations(1);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
-    expect(spyCreateTable).not.toHaveBeenCalled();
-    expect(spyWrite).toHaveBeenCalled();
+    expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).toHaveBeenCalled();
   });
 
   it('should only remove messages from queue if they have been successfully added to database', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyCreateTable = spyOn(EventDB.prototype, 'createTable').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
@@ -216,16 +285,13 @@ describe('A Worker', () => {
       },
     };
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
-    ddbMock.on(ListTablesCommand).resolves(listTableReply);
-    ddbMock.on(CreateTableCommand).resolves(createTableReply);
     ddbMock.on(PutItemCommand).rejects(itemReply);
-
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
     testWorker.setLoopIterations(1);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
-    expect(spyCreateTable).toHaveBeenCalledWith('epas_mock.tenant.one');
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).not.toHaveBeenCalled();
@@ -233,7 +299,6 @@ describe('A Worker', () => {
 
   it('should stop if an unwanted DB error occurs', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyCreateTable = spyOn(EventDB.prototype, 'createTable').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
@@ -256,15 +321,13 @@ describe('A Worker', () => {
       },
     };
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
-    ddbMock.on(CreateTableCommand).resolves(createTableReply);
     ddbMock.on(PutItemCommand).rejects(itemReply);
-    ddbMock.on(ListTablesCommand).resolves(listTableReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
     testWorker.setLoopIterations(1);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
-    expect(spyCreateTable).toHaveBeenCalledWith('epas_mock.tenant.one');
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).not.toHaveBeenCalled();
