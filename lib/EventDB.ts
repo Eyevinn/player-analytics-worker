@@ -1,6 +1,5 @@
 import winston from 'winston';
-import { AbstractDBAdapter } from '../types/interfaces';
-
+import { AbstractDBAdapter } from '@eyevinn/player-analytics-shared/types/interfaces';
 export default class EventDB {
   logger: winston.Logger;
   DBAdapter: AbstractDBAdapter;
@@ -16,28 +15,17 @@ export default class EventDB {
   public async TableExists(tableName: string): Promise<boolean> {
     await this.getDBAdapter();
     try {
-      // - If cache does not have the requested table name. Update cache, it might be there.
       if (!this.tableNamesCache.includes(tableName)) {
+        const doesExist = await this.DBAdapter.tableExists(tableName);
+        if (!doesExist) {
+          return false;
+        }
         this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
-        await this.createTable(tableName);
         this.tableNamesCache.push(tableName);
       }
+      return true;
     } catch (err) {
-      if (JSON.stringify(err).indexOf('ResourceInUseException')) {
-        this.tableNamesCache.push(tableName);
-      } else {
-        this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
-        throw new Error(err);
-      }
-    }
-    return this.tableNamesCache.includes(tableName);
-  }
-
-  public async createTable(name: string): Promise<void> {
-    try {
-      await this.DBAdapter.createTable(name);
-    } catch (err) {
-      this.logger.error(`[${this.instanceId}]: Failed to create table '${name}'!`);
+      this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
       throw new Error(err);
     }
   }
@@ -74,7 +62,9 @@ export default class EventDB {
         });
     });
     promise.catch((exc) =>
-      this.logger.error(`[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`)
+      this.logger.error(
+        `[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`
+      )
     );
     return promise;
   }
