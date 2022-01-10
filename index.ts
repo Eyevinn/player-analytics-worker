@@ -3,7 +3,6 @@ import EventDB from './lib/EventDB';
 import Queue from './lib/Queue';
 import { TABLE_PREFIX } from '@eyevinn/player-analytics-shared';
 import { v4 as uuidv4 } from 'uuid';
-//import { TABLE_PREFIX } from '@eyevinn/player-analytics-shared/util/constants';
 
 require('dotenv').config();
 
