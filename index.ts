@@ -1,6 +1,7 @@
 import winston from 'winston';
 import EventDB from './lib/EventDB';
 import Queue from './lib/Queue';
+import { TABLE_PREFIX } from '@eyevinn/player-analytics-shared';
 import { v4 as uuidv4 } from 'uuid';
 
 require('dotenv').config();
@@ -27,7 +28,7 @@ export class Worker {
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
     this.iterations = -1;
-    this.tablePrefix = 'epas_';
+    this.tablePrefix = TABLE_PREFIX;
     this.workerId = uuidv4();
     this.state = WorkerState.IDLE;
     this.queue = new Queue(opts.logger, this.workerId);
