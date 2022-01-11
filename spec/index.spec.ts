@@ -225,6 +225,60 @@ describe('A Worker', () => {
     expect(spyRemove).not.toHaveBeenCalled();
   });
 
+  it('should not push item to DB if target table status is not ACTIVE', async () => {
+    const describeTableReply: DescribeTableCommandOutput = {
+      $metadata: {
+        requestId: '123-123-abc-abc',
+        httpStatusCode: 200,
+      },
+      Table: {
+        TableStatus: 'CREATING',
+      },
+    };
+    const recieveMessageReply = {
+      $metadata: {},
+      Messages: [
+        {
+          MessageId: '62686810-05ba-4b43-62730ff3156g7jd3',
+          ReceiptHandle:
+            'MbZj6wDWli+JvwwJaBV+3dcjk2YW2vA3' +
+            '+STFFljTM8tJJg6HRG6PYSasuWXPJB+C' +
+            'wLj1FjgXUv1uSj1gUPAWV66FU/WeR4mq' +
+            '2OKpEGYWbnLmpRCJVAyeMjeU5ZBdtcQ+' +
+            'QEauMZc8ZRv37sIW2iJKq3M9MFx1YvV11A2x/KSbkJ0=',
+          MD5OfBody: 'fafb00f5732ab283681e124bf8747ed1',
+          Body: JSON.stringify({
+            event: 'loading',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 0,
+            host: 'mock.tenant.one',
+          }),
+        },
+      ],
+    };
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyGetEvent = spyOn(
+      Queue.prototype,
+      'getEventJSONsFromMessages'
+    ).and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => recieveMessageReply);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+    // Test the Worker
+    testWorker.setLoopIterations(1);
+    await testWorker.startAsync();
+
+    expect(spyTableExists).toHaveBeenCalled();
+    expect(spyWrite).not.toHaveBeenCalled();
+    expect(spyGetEvent).toHaveBeenCalled();
+    expect(spyRemove).not.toHaveBeenCalled();
+  });
+
   it('should remove item from queue if it has expired and the target table does not exist', async () => {
     const itemReply: AwsError = {
       Type: 'Sender',
