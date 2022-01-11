@@ -82,7 +82,7 @@ export class Worker {
             this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
             if (Date.now() - eventJson.timestamp > this.maxAge) {
               this.logger.warn(`[${this.workerId}]: Event has expired. Removing event from queue`);
-              this.removeFromQueue(collectedMessages[i]);
+              await this.removeFromQueue(collectedMessages[i]);
             }
             continue;
           }
@@ -94,7 +94,7 @@ export class Worker {
           (_, index) => writeResults[index].status !== 'rejected'
         );
         for (let i = 0; i < pushedMessages.length; i++) {
-          this.removeFromQueue(pushedMessages[i]);
+          await this.removeFromQueue(pushedMessages[i]);
         }
 
         writeResults.map((result) => {
