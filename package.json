@@ -1,5 +1,5 @@
 {
-  "name": "player-analytics-worker",
+  "name": "@eyevinn/player-analytics-worker",
   "version": "0.1.6",
   "description": "",
   "main": "./build/index.js",
