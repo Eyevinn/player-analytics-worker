@@ -1,28 +1,38 @@
 # player-analytics-worker
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Slack](http://slack.streamingtech.se/badge.svg)](http://slack.streamingtech.se)
+
+The Eyevinn Player Analytics (EPAS) is an open sourced framework and specification for tracking events from video players. It is a modular framework where you can pick and choose the modules you need. This is the worker module that process the data from the eventsink and processing queue and stores it in a database.
+
 ## Setup
 
-To be able to build and run the project locally a few things need to be set first.
-
-- `.npmrc` file is needed with the following content:
-
-``` txt
-@eyevinn:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=<token>
-```
-
-Where `<token>` is your personal GitHub access token, for more information see [link](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-with-a-personal-access-token).
+To be able to run the project locally a few things need to be set first.
 
 - Environment Variables need to be set. You can use the `dotenv.template` file as a guide as to what needs to be set.
 
-## Demo (SQS + DDB)
+## Development
 
-If you have set all the necessary environment variables, then you can demo the project.
+To run two workers locally with an SQS queue and a DynamoDB in AWS:
 
-run:
+```typescript
+import { Worker } from './index';
+import Logger from './logging/logger';
 
-- `PUBLISH_PACKAGES=<token> npm install`
-- `npm run build`
-- `npm run dev`
+const workers: Worker[] = [];
 
-...and the workers should start polling the SQS queue for messages and writing them to DynamoDB.
+for (let i = 0; i < 2; i++) {
+  workers.push(new Worker({ logger: Logger }));
+}
+
+workers.map((worker) => worker.startAsync());
+```
+
+The workers should start polling the SQS queue for messages and writing them to the DynamoDB.
+
+# About Eyevinn Technology
+
+Eyevinn Technology is an independent consultant firm specialized in video and streaming. Independent in a way that we are not commercially tied to any platform or technology vendor.
+
+At Eyevinn, every software developer consultant has a dedicated budget reserved for open source development and contribution to the open source community. This give us room for innovation, team building and personal competence development. And also gives us as a company a way to contribute back to the open source community.
+
+Want to know more about Eyevinn and how it is to work here. Contact us at work@eyevinn.se!
