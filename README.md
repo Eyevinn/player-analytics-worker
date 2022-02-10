@@ -15,7 +15,7 @@ To be able to run the project locally a few things need to be set first.
 To run two workers locally with an SQS queue and a DynamoDB in AWS:
 
 ```typescript
-import { Worker } from './index';
+import { Worker } from '@eyevinn/player-analytics-worker';
 import Logger from './logging/logger';
 
 const workers: Worker[] = [];
