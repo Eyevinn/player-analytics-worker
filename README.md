@@ -29,6 +29,14 @@ workers.map((worker) => worker.startAsync());
 
 The workers should start polling the SQS queue for messages and writing them to the DynamoDB.
 
+## Docker Container
+
+We also provide a ready-to-run Docker container on Docker Hub.
+
+```
+docker run --rm -e QUEUE_TYPE=SQS DB_TYPE=DYNAMODB AWS_REGION=eu-north-1 SQS_QUEUE_URL=<sqs-queue-url> eyevinntechnology/epas-worker:latest
+```
+
 # About Eyevinn Technology
 
 Eyevinn Technology is an independent consultant firm specialized in video and streaming. Independent in a way that we are not commercially tied to any platform or technology vendor.
