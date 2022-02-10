@@ -1,20 +1,24 @@
 {
-  "name": "player-analytics-worker",
+  "name": "@eyevinn/player-analytics-worker",
   "version": "0.1.6",
   "description": "",
-  "main": "index.ts",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
   "scripts": {
     "test": "ts-node node_modules/jasmine/bin/jasmine",
     "build": "tsc -p tsconfig-build.json",
     "postversion": "git push && git push --tags",
     "start": "node build/dev.js"
   },
+  "files": [
+    "build"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eyevinn/player-analytics-worker.git"
   },
   "author": "Eyevinn Technology <work@eyevinn.se>",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "contributors": [
     "Oscar Nord <oscar.nord@eyevinn.se> (Eyevinn Technology AB)",
     "Nicholas Frederiksen <nicholas.frederiksen@eyevinn.se> (Eyevinn Technology AB)"
