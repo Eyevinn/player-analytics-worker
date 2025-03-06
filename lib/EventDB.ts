@@ -1,5 +1,7 @@
 import winston from 'winston';
 import { AbstractDBAdapter } from '@eyevinn/player-analytics-shared/types/interfaces';
+//import { ClickHouseDBAdapter } from '@eyevinn/player-analytics-shared';
+import ClickHouseDBAdapter from './ClickHouseDBAdapter';
 export default class EventDB {
   logger: winston.Logger;
   DBAdapter: AbstractDBAdapter;
@@ -20,12 +22,11 @@ export default class EventDB {
         if (!doesExist) {
           return false;
         }
-        this.logger.debug(`[${this.instanceId}]: Updating tableNames cache`);
         this.tableNamesCache.push(tableName);
       }
       return true;
     } catch (err) {
-      this.logger.error(`[${this.instanceId}]: Failed to update tableNames cache!`);
+      this.logger.error(`Failed to update tableNames cache.!'${err}'`);
       throw new Error(err);
     }
   }
@@ -40,8 +41,15 @@ export default class EventDB {
         case 'MONGODB':
           dbAdapter = (await import('@eyevinn/player-analytics-shared')).MongoDBAdapter;
           break;
+        case 'TERMINAL':
+          this.logger.info("Terminal DB specified.");
+          dbAdapter = (await import('./TerminalDB')).default;
+          break;
+        case 'CLICKHOUSEDB':         
+          dbAdapter = ClickHouseDBAdapter;
+          break;
         default:
-          this.logger.warn(`[${this.instanceId}]: No database type specified`);
+          this.logger.warn(` No database type specified`);
           throw new Error('No database type specified');
       }
       this.DBAdapter = new dbAdapter(this.logger);
@@ -55,7 +63,7 @@ export default class EventDB {
         data: event,
       })
         .then(() => {
-          resolve('Wrote to Table');
+          resolve('Write to Table');
         })
         .catch((err) => {
           reject(err);
@@ -63,7 +71,7 @@ export default class EventDB {
     });
     promise.catch((exc) =>
       this.logger.error(
-        `[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`
+        `Failed Writing to Database! '${exc.error}'`
       )
     );
     return promise;
