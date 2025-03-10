@@ -15,6 +15,7 @@ defaults:
 
 jobs:
   deploy:
+    if: false
     name: Deploy
     runs-on: ubuntu-latest
 
