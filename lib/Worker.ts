@@ -73,7 +73,7 @@ export class Worker {
         }
         if (!collectedMessages || collectedMessages.length === 0) {
           this.logger.debug(`[${this.workerId}]: Received No Messages from Queue. Going to Try Again`);
-          await delay(5000);
+          await delay(3000);
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
