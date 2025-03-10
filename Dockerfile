@@ -2,6 +2,7 @@ FROM node:slim
 
 WORKDIR /app
 
+ENV NODE_ENV=production
 ADD . .
 
 RUN npm install
