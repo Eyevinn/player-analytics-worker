@@ -2,7 +2,6 @@ FROM node:slim
 
 WORKDIR /app
 
-ENV NODE_ENV=production
 ADD . .
 
 RUN npm install
@@ -13,4 +12,5 @@ ENV DB_TYPE=CLICKHOUSE
 ENV QUEUE_TYPE=SQS
 ENV AWS_REGION=dummy
 
+ENV NODE_ENV=production
 CMD ["npm", "start"]
