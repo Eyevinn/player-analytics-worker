@@ -40,6 +40,9 @@ export default class EventDB {
         case 'MONGODB':
           dbAdapter = (await import('@eyevinn/player-analytics-shared')).MongoDBAdapter;
           break;
+        case 'CLICKHOUSE':
+          dbAdapter = (await import('@eyevinn/player-analytics-shared')).ClickHouseDBAdapter;
+          break;
         default:
           this.logger.warn(`[${this.instanceId}]: No database type specified`);
           throw new Error('No database type specified');
