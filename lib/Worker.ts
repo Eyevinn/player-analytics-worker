@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 require('dotenv').config();
 
+const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
 export interface IWorkerOptions {
   logger: winston.Logger;
 }
@@ -71,13 +73,14 @@ export class Worker {
         }
         if (!collectedMessages || collectedMessages.length === 0) {
           this.logger.debug(`[${this.workerId}]: Received No Messages from Queue. Going to Try Again`);
+          await delay(3000);
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
         const validMessages: any[] = [];
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
-          const tableName: string = this.tablePrefix + eventJson.host;
+          const tableName: string = this.tablePrefix + (eventJson.host || 'default');
           const result: boolean = await this.db.TableExists(tableName);
           if (!result) {
             this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
@@ -105,6 +108,7 @@ export class Worker {
         });
       } catch (err) {
         this.logger.error(`[${this.workerId}]: Error: ${err}`);
+        await delay(20000);
       }
     }
   }
