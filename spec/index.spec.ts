@@ -26,6 +26,7 @@ import {
 } from '@aws-sdk/client-sqs';
 import Queue from '../lib/Queue';
 import EventDB from '../lib/EventDB';
+import { SqsQueueAdapter } from '@eyevinn/player-analytics-shared';
 
 const ddbMock = mockClient(DynamoDBClient);
 const sqsMock = mockClient(SQSClient);
@@ -43,6 +44,7 @@ describe('A Worker', () => {
     process.env.AWS_REGION = 'us-north-1';
     process.env.DB_TYPE = 'DYNAMODB';
 
+    const queueAdapter = spyOn(SqsQueueAdapter.prototype as any, 'checkQueueExists').and.returnValue(true);
     sqsMock.reset();
     ddbMock.reset();
 
