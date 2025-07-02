@@ -24,7 +24,8 @@ To run it with SQS and Clickhouse hosted in Eyevinn Open Source Cloud:
   AWS_SECRET_ACCESS_KEY=<SQS-SECRET-ACCESS-KEY> \
   SQS_ENDPOINT=https://<tenant-id>-<instance-name>.poundifdef-smoothmq.auto.prod.osaas.io \
   SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/1/events \
-  CLICKHOUSE_URL=https://<username>:<password>@<tenant-id>-<instance-name>.clickhouse-clickhouse.auto.prod.osaas.io \  DB_TYPE=CLICKHOUSE \
+  CLICKHOUSE_URL=https://<username>:<password>@<tenant-id>-<instance-name>.clickhouse-clickhouse.auto.prod.osaas.io \ 
+  DB_TYPE=CLICKHOUSE \
   QUEUE_TYPE=SQS \
   AWS_REGION=dummy \
   npm start
