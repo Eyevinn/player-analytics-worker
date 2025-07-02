@@ -51,24 +51,17 @@ export default class EventDB {
     }
   }
 
-  public write(event: any, table: string): Promise<any> {
-    const promise = new Promise((resolve, reject) => {
-      this.DBAdapter.putItem({
+  public async write(event: any, table: string): Promise<any> {
+    try {
+      await this.DBAdapter.putItem({
         tableName: table,
         data: event,
-      })
-        .then(() => {
-          resolve('Wrote to Table');
-        })
-        .catch((err) => {
-          reject(err);
-        });
-    });
-    promise.catch((exc) =>
-      this.logger.error(
-        `[${this.instanceId}]: Failed Writing to Database! '${exc.error}'`
-      )
-    );
-    return promise;
+      });
+      this.logger.debug(`[${this.instanceId}]: Wrote to Table`);
+    } catch (err) {
+      this.logger.error(`[${this.instanceId}]: Failed Writing to Database!`);
+      this.logger.error(err.message);
+      throw err;
+    }
   }
 }

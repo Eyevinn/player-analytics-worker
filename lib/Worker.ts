@@ -15,7 +15,7 @@ export interface IWorkerOptions {
 export enum WorkerState {
   IDLE = 'idle',
   ACTIVE = 'active',
-  INACTIVE = 'inactive',
+  INACTIVE = 'inactive'
 }
 
 export class Worker {
@@ -58,7 +58,16 @@ export class Worker {
     this.state = WorkerState.ACTIVE;
     this.logger.debug(`[${this.workerId}]: Worker is Active...`);
 
+    let failedIterations = 0;
+    let isPaused = false;
     while (this.state === WorkerState.ACTIVE) {
+      if (isPaused) {
+        // This will pause the worker but not terminate the process.
+        // Issue for failed writes needs to be fixed first and then the worker can be
+        // restarted.
+        await delay(30000);
+        continue;
+      }
       // For Unit tests
       if (this.iterations > 0) this.iterations--;
       if (this.iterations === 0) this.state = WorkerState.INACTIVE;
@@ -97,15 +106,25 @@ export class Worker {
         const pushedMessages = validMessages.filter(
           (_, index) => writeResults[index].status !== 'rejected'
         );
-        for (let i = 0; i < pushedMessages.length; i++) {
-          await this.removeFromQueue(pushedMessages[i]);
-        }
-
-        writeResults.map((result) => {
-          if (result.status === 'rejected' && result.reason === 'abort') {
-            this.state = WorkerState.INACTIVE;
+        if (pushedMessages.length == 0 && validMessages.length > 0) {
+          this.logger.warn(`[${this.workerId}]: No messages were pushed to the database but we have ${validMessages.length} valid messages.`);
+          failedIterations++;
+          if (failedIterations > 5) {
+            this.logger.error(`[${this.workerId}]: Too many failed iterations (${failedIterations}). Pausing worker.`);
+            isPaused = true;
           }
-        });
+        } else {
+          this.logger.debug(`[${this.workerId}]: Successfully pushed ${pushedMessages.length} messages to the database.`);
+          failedIterations = 0;
+          for (let i = 0; i < pushedMessages.length; i++) {
+            await this.removeFromQueue(pushedMessages[i]);
+          }
+          writeResults.map((result) => {
+            if (result.status === 'rejected' && result.reason === 'abort') {
+              this.state = WorkerState.INACTIVE;
+            }
+          });
+        }
       } catch (err) {
         this.logger.error(`[${this.workerId}]: Error: ${err}`);
         await delay(20000);
