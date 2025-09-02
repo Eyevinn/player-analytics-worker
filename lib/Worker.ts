@@ -89,7 +89,8 @@ export class Worker {
         const validMessages: any[] = [];
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
-          const tableName: string = this.tablePrefix + (eventJson.host || 'default');
+          const shardId = eventJson.shardId ? eventJson.shardId : (eventJson.host ? eventJson.host : 'default');
+          const tableName: string = this.tablePrefix + shardId;
           const result: boolean = await this.db.TableExists(tableName);
           if (!result) {
             this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
