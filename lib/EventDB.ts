@@ -64,4 +64,18 @@ export default class EventDB {
       throw err;
     }
   }
+
+  public async writeMultiple(events: any[], table: string): Promise<any> {
+    try {
+      await this.DBAdapter.putItems({
+        tableName: table,
+        data: events,
+      });
+      this.logger.debug(`[${this.instanceId}]: Wrote ${events.length} items to Table`);
+    } catch (err) {
+      this.logger.error(`[${this.instanceId}]: Failed Writing multiple items to Database!`);
+      this.logger.error(err.message);
+      throw err;
+    }
+  }
 }

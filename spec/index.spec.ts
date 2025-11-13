@@ -120,7 +120,7 @@ describe('A Worker', () => {
 
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -146,7 +146,7 @@ describe('A Worker', () => {
   // Try Again if messages = 0
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -206,7 +206,7 @@ describe('A Worker', () => {
       ],
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -260,7 +260,7 @@ describe('A Worker', () => {
       ],
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -296,7 +296,7 @@ describe('A Worker', () => {
       },
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -319,7 +319,7 @@ describe('A Worker', () => {
 
   it('should only remove messages from queue if they have been successfully added to database', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
@@ -355,7 +355,7 @@ describe('A Worker', () => {
 
   it('should stop if an unwanted DB error occurs', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
-    const spyWrite = spyOn(EventDB.prototype, 'write').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
