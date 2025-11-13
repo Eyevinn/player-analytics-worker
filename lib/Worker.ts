@@ -87,6 +87,8 @@ export class Worker {
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
         const validMessages: any[] = [];
+        const eventsByTable: { [tableName: string]: { events: any[], messageIndices: number[] } } = {};
+        
         for (let i = 0; i < allEvents.length; i++) {
           const eventJson = allEvents[i];
           const shardId = eventJson.shardId ? eventJson.shardId : (eventJson.host ? eventJson.host : 'default');
@@ -101,7 +103,16 @@ export class Worker {
             continue;
           }
           validMessages.push(collectedMessages[i]);
-          writePromises.push(this.db.write(eventJson, tableName));
+          
+          if (!eventsByTable[tableName]) {
+            eventsByTable[tableName] = { events: [], messageIndices: [] };
+          }
+          eventsByTable[tableName].events.push(eventJson);
+          eventsByTable[tableName].messageIndices.push(validMessages.length - 1);
+        }
+
+        for (const [tableName, tableData] of Object.entries(eventsByTable)) {
+          writePromises.push(this.db.writeMultiple(tableData.events, tableName));
         }
         const writeResults = await Promise.allSettled(writePromises);
         const pushedMessages = validMessages.filter(
