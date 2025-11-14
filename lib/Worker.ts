@@ -73,7 +73,6 @@ export class Worker {
       if (this.iterations === 0) this.state = WorkerState.INACTIVE;
 
       this.logger.debug(`[${this.workerId}]: Worker is fetching from Queue...`);
-      const writePromises: PromiseSettledResult<any>[] = [];
       try {
         const collectedMessages: any[] = await this.queue.receive();
         if (!Array.isArray(collectedMessages)) {
@@ -111,13 +110,32 @@ export class Worker {
           eventsByTable[tableName].messageIndices.push(validMessages.length - 1);
         }
 
+        const writePromises: Promise<any>[] = [];
+        const tableNames: string[] = [];
         for (const [tableName, tableData] of Object.entries(eventsByTable)) {
           writePromises.push(this.db.writeMultiple(tableData.events, tableName));
+          tableNames.push(tableName);
         }
+        
         const writeResults = await Promise.allSettled(writePromises);
-        const pushedMessages = validMessages.filter(
-          (_, index) => writeResults[index].status !== 'rejected'
-        );
+        let pushedMessages: any[] = [];
+        let hasFailures = false;
+        
+        for (let i = 0; i < writeResults.length; i++) {
+          const result = writeResults[i];
+          const tableName = tableNames[i];
+          const tableData = eventsByTable[tableName];
+          
+          if (result.status === 'fulfilled') {
+            // Add all messages for this table to pushedMessages
+            for (const msgIndex of tableData.messageIndices) {
+              pushedMessages.push(validMessages[msgIndex]);
+            }
+          } else {
+            hasFailures = true;
+            this.logger.error(`[${this.workerId}]: Failed to write to table ${tableName}:`, result.reason);
+          }
+        }
         if (pushedMessages.length == 0 && validMessages.length > 0) {
           this.logger.warn(`[${this.workerId}]: No messages were pushed to the database but we have ${validMessages.length} valid messages.`);
           failedIterations++;
@@ -131,11 +149,14 @@ export class Worker {
           for (let i = 0; i < pushedMessages.length; i++) {
             await this.removeFromQueue(pushedMessages[i]);
           }
-          writeResults.map((result) => {
+          
+          // Check for abort conditions
+          for (const result of writeResults) {
             if (result.status === 'rejected' && result.reason === 'abort') {
               this.state = WorkerState.INACTIVE;
+              break;
             }
-          });
+          }
         }
       } catch (err) {
         this.logger.error(`[${this.workerId}]: Error: ${err}`);
