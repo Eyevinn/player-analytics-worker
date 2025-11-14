@@ -9,6 +9,9 @@ const levels = {
 };
 
 const level = () => {
+  if (process.env.DEBUG === 'true' || process.env.DEBUG === '1') {
+    return 'debug';
+  }
   const env = process.env.NODE_ENV || 'development';
   const isDevEnv = env === 'development';
   return isDevEnv ? 'debug' : 'info';
