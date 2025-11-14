@@ -389,4 +389,92 @@ describe('A Worker', () => {
     expect(spyRemove).not.toHaveBeenCalled();
     expect(testWorker.state).toEqual(WorkerState.INACTIVE);
   });
+
+  it('should batch multiple events by table and call writeMultiple with arrays', async () => {
+    const multipleMessagesReply = {
+      $metadata: {},
+      Messages: [
+        {
+          MessageId: 'msg1',
+          ReceiptHandle: 'handle1',
+          MD5OfBody: 'hash1',
+          Body: JSON.stringify({
+            event: 'play',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 0,
+            host: 'tenant.one', // Will create table epas_tenant.one
+          }),
+        },
+        {
+          MessageId: 'msg2',
+          ReceiptHandle: 'handle2',
+          MD5OfBody: 'hash2',
+          Body: JSON.stringify({
+            event: 'pause',
+            timestamp: Date.now(),
+            playhead: 30,
+            duration: 0,
+            host: 'tenant.one', // Same table as first event
+          }),
+        },
+        {
+          MessageId: 'msg3',
+          ReceiptHandle: 'handle3',
+          MD5OfBody: 'hash3',
+          Body: JSON.stringify({
+            event: 'seek',
+            timestamp: Date.now(),
+            playhead: 60,
+            duration: 0,
+            host: 'tenant.two', // Will create table epas_tenant.two
+          }),
+        },
+      ],
+    };
+
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
+    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyGetEvent = spyOn(
+      Queue.prototype,
+      'getEventJSONsFromMessages'
+    ).and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => multipleMessagesReply);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    testWorker.setLoopIterations(1);
+    await testWorker.startAsync();
+
+    // Verify basic operations
+    expect(spyTableExists).toHaveBeenCalled();
+    expect(spyWrite).toHaveBeenCalled();
+    expect(spyGetEvent).toHaveBeenCalled();
+    expect(spyRemove).toHaveBeenCalled();
+
+    // Verify batch behavior - should be called twice (once per table)
+    expect(spyWrite).toHaveBeenCalledTimes(2);
+
+    // Verify the first call was for tenant.one table with 2 events
+    const firstCall = spyWrite.calls.argsFor(0);
+    expect(firstCall[0]).toEqual(jasmine.any(Array)); // events array
+    expect(firstCall[0].length).toBe(2); // 2 events for tenant.one
+    expect(firstCall[1]).toBe('epas_tenant.one'); // table name
+
+    // Verify the second call was for tenant.two table with 1 event
+    const secondCall = spyWrite.calls.argsFor(1);
+    expect(secondCall[0]).toEqual(jasmine.any(Array)); // events array
+    expect(secondCall[0].length).toBe(1); // 1 event for tenant.two
+    expect(secondCall[1]).toBe('epas_tenant.two'); // table name
+
+    // Verify events are correctly grouped
+    expect(firstCall[0][0].event).toBe('play');
+    expect(firstCall[0][1].event).toBe('pause');
+    expect(secondCall[0][0].event).toBe('seek');
+  });
 });
