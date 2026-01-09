@@ -46,13 +46,12 @@ export default class Queue {
   }
 
   public async receive(): Promise<Object> {
+    const startTime = Date.now();
     try {
       await this.getQueueAdapter();
-      
-      const startTime = Date.now();
       const queueResponse = await this.QueueAdapter.pullFromQueue();
-      const responseTime = Date.now() - startTime;
       
+      const responseTime = Date.now() - startTime;
       this.recordResponseTime('receive', responseTime);
       
       return queueResponse;
@@ -63,15 +62,14 @@ export default class Queue {
   }
 
   public async remove(queueMessageObject: Object): Promise<Object> {
+    const startTime = Date.now();
     try {
       await this.getQueueAdapter();
-      
-      const startTime = Date.now();
       const queueResponse = await this.QueueAdapter.removeFromQueue(
         queueMessageObject
       );
-      const responseTime = Date.now() - startTime;
       
+      const responseTime = Date.now() - startTime;
       this.recordResponseTime('remove', responseTime);
       
       return queueResponse;
