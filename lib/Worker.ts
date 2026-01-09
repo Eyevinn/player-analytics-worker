@@ -186,7 +186,14 @@ export class Worker {
   private calculateThrottleDelay(): number {
     const avgReceiveTime = this.queue.getAverageResponseTime('receive');
     const avgRemoveTime = this.queue.getAverageResponseTime('remove');
-    const avgResponseTime = (avgReceiveTime + avgRemoveTime) / 2;
+    
+    // Use only receive time if remove time is not available (idle queue scenario)
+    const avgResponseTime = avgRemoveTime > 0 ? (avgReceiveTime + avgRemoveTime) / 2 : avgReceiveTime;
+    
+    // Only apply throttling logic if we have actual response time data
+    if (avgResponseTime === 0) {
+      return this.currentDelay; // No data yet, keep current delay
+    }
 
     if (avgResponseTime > this.throttleConfig.responseTimeThreshold) {
       this.currentDelay = Math.min(
@@ -195,10 +202,10 @@ export class Worker {
       );
       
       this.logger.warn(
-        `[${this.workerId}]: High response times detected (avg: ${avgResponseTime}ms). ` +
+        `[${this.workerId}]: High response times detected (avg: ${avgResponseTime.toFixed(1)}ms). ` +
         `Increasing throttle delay to ${this.currentDelay}ms`
       );
-    } else if (avgResponseTime < this.throttleConfig.responseTimeThreshold / 2) {
+    } else if (avgResponseTime < this.throttleConfig.responseTimeThreshold / 2 && avgResponseTime > 0) {
       this.currentDelay = Math.max(
         this.currentDelay / this.throttleConfig.backoffMultiplier,
         this.throttleConfig.baseDelay
@@ -206,7 +213,7 @@ export class Worker {
       
       if (process.env.DEBUG) {
         this.logger.debug(
-          `[${this.workerId}]: Response times normalized (avg: ${avgResponseTime}ms). ` +
+          `[${this.workerId}]: Response times normalized (avg: ${avgResponseTime.toFixed(1)}ms). ` +
           `Reducing throttle delay to ${this.currentDelay}ms`
         );
       }
