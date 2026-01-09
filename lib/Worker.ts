@@ -18,6 +18,13 @@ export enum WorkerState {
   INACTIVE = 'inactive'
 }
 
+interface ThrottleConfig {
+  baseDelay: number;
+  maxDelay: number;
+  responseTimeThreshold: number;
+  backoffMultiplier: number;
+}
+
 export class Worker {
   logger: winston.Logger;
   queue: any;
@@ -27,6 +34,8 @@ export class Worker {
   tablePrefix: string;
   iterations: number;
   maxAge: number;
+  private throttleConfig: ThrottleConfig;
+  private currentDelay: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -37,6 +46,14 @@ export class Worker {
     this.queue = new Queue(opts.logger, this.workerId);
     this.db = new EventDB(opts.logger, this.workerId);
     this.maxAge = process.env.MAX_AGE ? parseInt(process.env.MAX_AGE) : 60000;
+    
+    this.throttleConfig = {
+      baseDelay: parseInt(process.env.BASE_QUEUE_DELAY || '3000'),
+      maxDelay: parseInt(process.env.MAX_QUEUE_DELAY || '30000'),
+      responseTimeThreshold: parseInt(process.env.RESPONSE_TIME_THRESHOLD || '5000'),
+      backoffMultiplier: parseFloat(process.env.BACKOFF_MULTIPLIER || '1.5')
+    };
+    this.currentDelay = this.throttleConfig.baseDelay;
   }
 
   // For unit tests only
@@ -81,7 +98,8 @@ export class Worker {
         }
         if (!collectedMessages || collectedMessages.length === 0) {
           this.logger.debug(`[${this.workerId}]: Received No Messages from Queue. Going to Try Again`);
-          await delay(3000);
+          const throttleDelay = this.calculateThrottleDelay();
+          await delay(throttleDelay);
           continue;
         }
         const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
@@ -163,5 +181,51 @@ export class Worker {
         await delay(20000);
       }
     }
+  }
+
+  private calculateThrottleDelay(): number {
+    const avgReceiveTime = this.queue.getAverageResponseTime('receive');
+    const avgRemoveTime = this.queue.getAverageResponseTime('remove');
+    const avgResponseTime = (avgReceiveTime + avgRemoveTime) / 2;
+
+    if (avgResponseTime > this.throttleConfig.responseTimeThreshold) {
+      this.currentDelay = Math.min(
+        this.currentDelay * this.throttleConfig.backoffMultiplier,
+        this.throttleConfig.maxDelay
+      );
+      
+      this.logger.warn(
+        `[${this.workerId}]: High response times detected (avg: ${avgResponseTime}ms). ` +
+        `Increasing throttle delay to ${this.currentDelay}ms`
+      );
+    } else if (avgResponseTime < this.throttleConfig.responseTimeThreshold / 2) {
+      this.currentDelay = Math.max(
+        this.currentDelay / this.throttleConfig.backoffMultiplier,
+        this.throttleConfig.baseDelay
+      );
+      
+      if (process.env.DEBUG) {
+        this.logger.debug(
+          `[${this.workerId}]: Response times normalized (avg: ${avgResponseTime}ms). ` +
+          `Reducing throttle delay to ${this.currentDelay}ms`
+        );
+      }
+    }
+
+    return this.currentDelay;
+  }
+
+  public getThrottleStats(): { 
+    currentDelay: number; 
+    avgReceiveTime: number; 
+    avgRemoveTime: number; 
+    config: ThrottleConfig 
+  } {
+    return {
+      currentDelay: this.currentDelay,
+      avgReceiveTime: this.queue.getAverageResponseTime('receive'),
+      avgRemoveTime: this.queue.getAverageResponseTime('remove'),
+      config: { ...this.throttleConfig }
+    };
   }
 }
