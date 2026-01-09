@@ -1,5 +1,12 @@
 import winston from 'winston';
 import { AbstractDBAdapter } from '@eyevinn/player-analytics-shared/types/interfaces';
+
+interface BatchWriteResult {
+  success: boolean;
+  tableName: string;
+  error?: any;
+}
+
 export default class EventDB {
   logger: winston.Logger;
   DBAdapter: AbstractDBAdapter;
@@ -77,5 +84,29 @@ export default class EventDB {
       this.logger.error(err.message);
       throw err;
     }
+  }
+
+  public async batchWriteByTable(eventsByTable: { [tableName: string]: any[] }): Promise<BatchWriteResult[]> {
+    await this.getDBAdapter();
+    const writePromises: Promise<BatchWriteResult>[] = [];
+    
+    for (const [tableName, events] of Object.entries(eventsByTable)) {
+      if (events.length === 0) continue;
+      
+      const writePromise = this.writeMultiple(events, tableName)
+        .then(() => ({ success: true, tableName }))
+        .catch((error) => ({ success: false, tableName, error }));
+      
+      writePromises.push(writePromise);
+    }
+
+    const results = await Promise.all(writePromises);
+    
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.length - successCount;
+    
+    this.logger.debug(`[${this.instanceId}]: Batch write completed: ${successCount} successes, ${failureCount} failures`);
+    
+    return results;
   }
 }
