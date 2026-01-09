@@ -4,12 +4,3 @@ AWS_REGION = <your-aws-region>
 DB_TYPE = <DYNAMODB | MONGODB>
 NUMBER_OF_WORKERS = <number-of-workers>
 MAX_AGE = <max-age-of-message-in-milliseconds>
-
-# Throttling Configuration
-BASE_QUEUE_DELAY = <base-delay-milliseconds-default-3000>
-MAX_QUEUE_DELAY = <maximum-delay-milliseconds-default-30000>
-RESPONSE_TIME_THRESHOLD = <response-time-threshold-milliseconds-default-5000>
-BACKOFF_MULTIPLIER = <backoff-multiplier-default-1.5>
-
-# Debug Configuration
-DEBUG = <true-or-false-for-debug-logging>
