@@ -33,6 +33,35 @@ To run it with SQS and Clickhouse hosted in Eyevinn Open Source Cloud:
 
 The workers should start polling the SQS queue for messages and writing them to the Clickhouse database.
 
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `QUEUE_TYPE` | Queue type to use (`SQS`, `beanstalkd`, `redis`) | Required |
+| `DB_TYPE` | Database type (`DYNAMODB`, `CLICKHOUSE`) | Required |
+| `NUMBER_OF_WORKERS` | Number of worker instances to run | `2` |
+| `SQS_PULL_INTERVAL` | Interval in ms between SQS polling cycles | `1000` |
+| `DB_PROCESS_INTERVAL` | Interval in ms between database write cycles | `2000` |
+| `STARTUP_JITTER_MS` | Maximum random startup delay in ms to spread out worker starts | `5000` |
+| `SKIP_QUEUE_EXISTS_CHECK` | Skip queue existence validation on startup (`true`/`false`) | `false` |
+| `MAX_AGE` | Maximum age in ms for events before they are discarded | `60000` |
+| `PAUSE_DURATION` | Duration in ms to pause worker after repeated failures | `300000` |
+
+### Concurrent Producer/Consumer Architecture
+
+Each worker runs two independent concurrent loops:
+
+- **SQS Producer Loop**: Polls messages from SQS and adds them to an internal memory queue
+- **DB Consumer Loop**: Processes messages from the internal queue and writes them to the database
+
+This architecture allows SQS polling and database writes to happen concurrently, improving throughput. The internal queue acts as a buffer, decoupling the two operations.
+
+### Startup Jitter
+
+When running multiple workers, the `STARTUP_JITTER_MS` setting helps avoid the "thundering herd" problem by adding a random delay (between 0 and the configured value) before each worker starts. This spreads out initial SQS and database connections across workers.
+
 # Support
 
 Join our [community on Slack](http://slack.osaas.io) where you can post any questions regarding any of our open source projects. Eyevinn's consulting business can also offer you:

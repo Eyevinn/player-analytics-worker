@@ -29,7 +29,8 @@ export default class Queue {
           this.logger.warn(`[${this.instanceId}]: No queue type specified`);
           throw new Error('No queue type specified');
       }
-      this.QueueAdapter = new queueAdapter(this.logger);
+      const skipQueueExistsCheck = process.env.SKIP_QUEUE_EXISTS_CHECK === 'true';
+      this.QueueAdapter = new queueAdapter(this.logger, { skipQueueExistsCheck });
     }
   }
 
