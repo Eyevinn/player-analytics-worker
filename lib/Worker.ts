@@ -35,6 +35,7 @@ export class Worker {
   isPaused: boolean;
   pauseDuration: number;
   startupJitterMs: number;
+  sqsConcurrentReceives: number;
   private pausedAt: number;
 
   constructor(opts: IWorkerOptions) {
@@ -54,6 +55,7 @@ export class Worker {
     this.pausedAt = 0;
     this.pauseDuration = process.env.PAUSE_DURATION ? parseInt(process.env.PAUSE_DURATION) : 300000; // 5 minutes default
     this.startupJitterMs = process.env.STARTUP_JITTER_MS ? parseInt(process.env.STARTUP_JITTER_MS) : 5000; // 5 seconds default
+    this.sqsConcurrentReceives = process.env.SQS_CONCURRENT_RECEIVES ? parseInt(process.env.SQS_CONCURRENT_RECEIVES) : 5;
   }
 
   resume() {
@@ -83,6 +85,7 @@ export class Worker {
   setTestIntervals(sqsInterval: number = 100, dbInterval: number = 200) {
     this.sqsPullInterval = sqsInterval;
     this.dbProcessInterval = dbInterval;
+    this.sqsConcurrentReceives = 1; // Use single receive for predictable test behavior
     this.logger.warn(`[${this.workerId}]: Test mode - SQS interval: ${sqsInterval}ms, DB interval: ${dbInterval}ms`);
   }
 
@@ -103,14 +106,22 @@ export class Worker {
         return;
       }
 
-      const collectedMessages: any[] = await this.queue.receive();
+      // Make concurrent receive calls to overcome SQS 10 message limit
+      const receivePromises = Array(this.sqsConcurrentReceives)
+        .fill(null)
+        .map(() => this.queue.receive());
 
-      if (!Array.isArray(collectedMessages) || collectedMessages.length === 0) {
+      const results = await Promise.all(receivePromises);
+      const collectedMessages: any[] = results
+        .filter(Array.isArray)
+        .flat();
+
+      if (collectedMessages.length === 0) {
         this.logger.debug(`[${this.workerId}]: No messages received from SQS`);
         return;
       }
 
-      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS`);
+      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS (${this.sqsConcurrentReceives} concurrent receives)`);
 
       const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
       let addedCount = 0;
