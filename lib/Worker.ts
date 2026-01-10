@@ -113,47 +113,26 @@ export class Worker {
       this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS`);
 
       const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
-      const pendingMessages: { message: any, event: any, tableName: string, index: number }[] = [];
+      let addedCount = 0;
+      let skippedCount = 0;
 
-      // First pass: validate all messages and check for available tables
+      // Add messages to internal queue and immediately remove from SQS
+      // Table existence check is deferred to the DB consumer for true decoupling
       for (let i = 0; i < allEvents.length; i++) {
+        if (!this.internalQueue.hasCapacity(1)) {
+          skippedCount++;
+          this.logger.warn(`[${this.workerId}]: Internal queue capacity exceeded. Skipping remaining ${allEvents.length - i} messages.`);
+          break;
+        }
+
         const eventJson = allEvents[i];
         const shardId = eventJson.shardId ? eventJson.shardId : (eventJson.host ? eventJson.host : 'default');
         const tableName: string = this.tablePrefix + shardId;
 
-        const tableExists: boolean = await this.db.TableExists(tableName);
-        if (!tableExists) {
-          this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
-          if (Date.now() - eventJson.timestamp > this.maxAge) {
-            this.logger.warn(`[${this.workerId}]: Event has expired. Removing event from queue`);
-            await this.removeFromQueue(collectedMessages[i]);
-          }
-          continue;
-        }
-
-        pendingMessages.push({
-          message: collectedMessages[i],
-          event: eventJson,
-          tableName,
-          index: i
-        });
-      }
-
-      // Second pass: add messages to internal queue and immediately remove from SQS
-      let addedCount = 0;
-      let skippedCount = 0;
-
-      for (const pending of pendingMessages) {
-        if (!this.internalQueue.hasCapacity(1)) {
-          skippedCount++;
-          this.logger.warn(`[${this.workerId}]: Internal queue capacity exceeded. Skipping remaining ${pendingMessages.length - addedCount - skippedCount + 1} messages.`);
-          break;
-        }
-
-        const added = this.internalQueue.add(pending.message, pending.event, pending.tableName, pending.index);
+        const added = this.internalQueue.add(collectedMessages[i], eventJson, tableName, i);
         if (added) {
           // Remove from SQS immediately after adding to internal queue
-          await this.removeFromQueue(pending.message);
+          await this.removeFromQueue(collectedMessages[i]);
           addedCount++;
         } else {
           skippedCount++;
@@ -186,31 +165,60 @@ export class Worker {
 
       const groupedByTable = this.internalQueue.groupByTable(batch);
       const eventsByTable: { [tableName: string]: any[] } = {};
+      const messagesToDiscard: any[] = [];
+      const messagesToRequeue: any[] = [];
 
+      // Check table existence for each table group
       for (const [tableName, queuedMessages] of Object.entries(groupedByTable)) {
-        eventsByTable[tableName] = queuedMessages.map(qm => qm.event);
-      }
+        const tableExists: boolean = await this.db.TableExists(tableName);
 
-      const writeResults = await this.db.batchWriteByTable(eventsByTable);
+        if (tableExists) {
+          eventsByTable[tableName] = queuedMessages.map(qm => qm.event);
+        } else {
+          this.logger.warn(`[${this.workerId}]: No Table named:'${tableName}' was found`);
+
+          // Check if events have expired
+          for (const qm of queuedMessages) {
+            if (Date.now() - qm.event.timestamp > this.maxAge) {
+              this.logger.warn(`[${this.workerId}]: Event has expired. Discarding.`);
+              messagesToDiscard.push(qm);
+            } else {
+              // Table doesn't exist yet but event hasn't expired - requeue for retry
+              messagesToRequeue.push(qm);
+            }
+          }
+        }
+      }
 
       let successCount = 0;
       const failedMessages: any[] = [];
 
-      for (const result of writeResults) {
-        const tableMessages = groupedByTable[result.tableName];
-        if (result.success) {
-          successCount += tableMessages.length;
-        } else {
-          this.logger.error(`[${this.workerId}]: Failed to write to table ${result.tableName}:`, result.error);
-          failedMessages.push(...tableMessages);
+      // Only write to tables that exist
+      if (Object.keys(eventsByTable).length > 0) {
+        const writeResults = await this.db.batchWriteByTable(eventsByTable);
+
+        for (const result of writeResults) {
+          const tableMessages = groupedByTable[result.tableName];
+          if (result.success) {
+            successCount += tableMessages.length;
+          } else {
+            this.logger.error(`[${this.workerId}]: Failed to write to table ${result.tableName}:`, result.error);
+            failedMessages.push(...tableMessages);
+          }
         }
+      }
+
+      // Requeue messages for tables that don't exist yet (and haven't expired)
+      if (messagesToRequeue.length > 0) {
+        this.internalQueue.requeue(messagesToRequeue);
+        this.logger.debug(`[${this.workerId}]: Requeued ${messagesToRequeue.length} messages for non-existent tables`);
       }
 
       if (failedMessages.length > 0) {
         this.internalQueue.requeue(failedMessages);
       }
 
-      this.logger.debug(`[${this.workerId}]: Processed batch: ${successCount} successful, ${failedMessages.length} failed`);
+      this.logger.debug(`[${this.workerId}]: Processed batch: ${successCount} successful, ${failedMessages.length} failed, ${messagesToDiscard.length} discarded, ${messagesToRequeue.length} requeued for missing tables`);
 
     } catch (err) {
       this.logger.error(`[${this.workerId}]: Error processing internal queue batch: ${err}`);
