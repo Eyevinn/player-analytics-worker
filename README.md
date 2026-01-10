@@ -43,6 +43,7 @@ The workers should start polling the SQS queue for messages and writing them to 
 | `DB_TYPE` | Database type (`DYNAMODB`, `CLICKHOUSE`) | Required |
 | `NUMBER_OF_WORKERS` | Number of worker instances to run | `2` |
 | `SQS_PULL_INTERVAL` | Interval in ms between SQS polling cycles | `1000` |
+| `SQS_CONCURRENT_RECEIVES` | Number of concurrent SQS receive calls per interval (max 10 msgs each) | `5` |
 | `DB_PROCESS_INTERVAL` | Interval in ms between database write cycles | `2000` |
 | `STARTUP_JITTER_MS` | Maximum random startup delay in ms to spread out worker starts | `5000` |
 | `SKIP_QUEUE_EXISTS_CHECK` | Skip queue existence validation on startup (`true`/`false`) | `false` |
