@@ -134,7 +134,7 @@ export class Worker {
         });
       }
 
-      // Second pass: add messages to internal queue with capacity check
+      // Second pass: add messages to internal queue and immediately remove from SQS
       let addedCount = 0;
       let skippedCount = 0;
 
@@ -147,6 +147,8 @@ export class Worker {
 
         const added = this.internalQueue.add(pending.message, pending.event, pending.tableName, pending.index);
         if (added) {
+          // Remove from SQS immediately after adding to internal queue
+          await this.removeFromQueue(pending.message);
           addedCount++;
         } else {
           skippedCount++;
@@ -158,7 +160,7 @@ export class Worker {
         this.logger.warn(`[${this.workerId}]: Could not process ${skippedCount} messages due to internal queue capacity. Messages remain in SQS for retry.`);
       }
 
-      this.logger.debug(`[${this.workerId}]: Added ${addedCount} messages to internal queue. Queue size: ${this.internalQueue.getQueueSize()}`);
+      this.logger.debug(`[${this.workerId}]: Added ${addedCount} messages to internal queue and removed from SQS. Queue size: ${this.internalQueue.getQueueSize()}`);
     } catch (err) {
       this.logger.error(`[${this.workerId}]: Error processing SQS messages: ${err}`);
     }
@@ -186,28 +188,24 @@ export class Worker {
 
       const writeResults = await this.db.batchWriteByTable(eventsByTable);
 
-      const successfulMessages: any[] = [];
+      let successCount = 0;
       const failedMessages: any[] = [];
 
       for (const result of writeResults) {
         const tableMessages = groupedByTable[result.tableName];
         if (result.success) {
-          successfulMessages.push(...tableMessages.map(qm => qm.message));
+          successCount += tableMessages.length;
         } else {
           this.logger.error(`[${this.workerId}]: Failed to write to table ${result.tableName}:`, result.error);
           failedMessages.push(...tableMessages);
         }
       }
 
-      for (const message of successfulMessages) {
-        await this.removeFromQueue(message);
-      }
-
       if (failedMessages.length > 0) {
         this.internalQueue.requeue(failedMessages);
       }
 
-      this.logger.debug(`[${this.workerId}]: Processed batch: ${successfulMessages.length} successful, ${failedMessages.length} failed`);
+      this.logger.debug(`[${this.workerId}]: Processed batch: ${successCount} successful, ${failedMessages.length} failed`);
 
     } catch (err) {
       this.logger.error(`[${this.workerId}]: Error processing internal queue batch: ${err}`);
