@@ -37,6 +37,8 @@ export class Worker {
   startupJitterMs: number;
   queueConcurrentReceives: number;
   private pausedAt: number;
+  private batchRemoveFailures: number;
+  private useBatchRemove: boolean;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -56,6 +58,8 @@ export class Worker {
     this.pauseDuration = process.env.PAUSE_DURATION ? parseInt(process.env.PAUSE_DURATION) : 300000; // 5 minutes default
     this.startupJitterMs = process.env.STARTUP_JITTER_MS ? parseInt(process.env.STARTUP_JITTER_MS) : 5000; // 5 seconds default
     this.queueConcurrentReceives = this.getEnvWithDeprecation('QUEUE_CONCURRENT_RECEIVES', 'SQS_CONCURRENT_RECEIVES', 5);
+    this.batchRemoveFailures = 0;
+    this.useBatchRemove = true;
   }
 
   private getEnvWithDeprecation(newName: string, deprecatedName: string, defaultValue: number): number {
@@ -98,6 +102,77 @@ export class Worker {
     this.dbProcessInterval = dbInterval;
     this.queueConcurrentReceives = 1; // Use single receive for predictable test behavior
     this.logger.warn(`[${this.workerId}]: Test mode - Queue interval: ${queueInterval}ms, DB interval: ${dbInterval}ms`);
+  }
+
+  private async removeFromQueue(message: any, index: number): Promise<boolean> {
+    const startTime = Date.now();
+    this.logger.debug(`[${this.workerId}]: Queue remove #${index + 1} starting`);
+    try {
+      await this.queue.remove(message);
+      this.logger.debug(`[${this.workerId}]: Queue remove #${index + 1} completed in ${Date.now() - startTime}ms`);
+      return true;
+    } catch (err) {
+      this.logger.error(`[${this.workerId}]: Queue remove #${index + 1} failed after ${Date.now() - startTime}ms: ${err}`);
+      return false;
+    }
+  }
+
+  private async removeMessagesIndividually(messages: any[]): Promise<{ successful: number; failed: number }> {
+    const results = await Promise.all(messages.map((msg, idx) => this.removeFromQueue(msg, idx)));
+    const successful = results.filter(r => r).length;
+    const failed = results.filter(r => !r).length;
+    return { successful, failed };
+  }
+
+  private async removeMessagesFromQueue(messages: any[]): Promise<void> {
+    const removeStartTime = Date.now();
+    this.logger.debug(`[${this.workerId}]: Removing ${messages.length} messages from queue`);
+
+    let successful = 0;
+    let failed = 0;
+
+    if (this.useBatchRemove) {
+      let batchFailed = false;
+      try {
+        const result: any = await this.queue.removeBatch(messages);
+        successful = result.successful?.length || 0;
+        failed = result.failed?.length || 0;
+
+        // If all messages failed, treat as batch removal not supported
+        if (failed === messages.length && successful === 0) {
+          batchFailed = true;
+          this.logger.warn(`[${this.workerId}]: Batch remove returned all ${failed} messages as failed`);
+        } else if (failed > 0) {
+          this.logger.error(`[${this.workerId}]: Failed to remove ${failed} messages from queue`);
+        }
+      } catch (err) {
+        batchFailed = true;
+        this.logger.warn(`[${this.workerId}]: Batch remove threw error: ${err}`);
+      }
+
+      if (batchFailed) {
+        this.batchRemoveFailures++;
+        this.logger.warn(`[${this.workerId}]: Batch remove failed (attempt ${this.batchRemoveFailures}/3), falling back to individual removes`);
+
+        if (this.batchRemoveFailures >= 3) {
+          this.logger.warn(`[${this.workerId}]: Batch remove failed 3 times, permanently disabling batch removal`);
+          this.useBatchRemove = false;
+        }
+
+        // Fall back to individual removes
+        const fallbackResult = await this.removeMessagesIndividually(messages);
+        successful = fallbackResult.successful;
+        failed = fallbackResult.failed;
+      }
+    } else {
+      // Batch remove is disabled, use individual removes
+      const result = await this.removeMessagesIndividually(messages);
+      successful = result.successful;
+      failed = result.failed;
+    }
+
+    const removeDuration = Date.now() - removeStartTime;
+    this.logger.debug(`[${this.workerId}]: Removed ${successful} messages from queue in ${removeDuration}ms${failed > 0 ? ` (${failed} failed)` : ''}`);
   }
 
   private async processQueueMessages() {
@@ -160,16 +235,9 @@ export class Worker {
         }
       }
 
-      // Remove messages from queue using batch API
+      // Remove messages from queue
       if (messagesToRemove.length > 0) {
-        const removeStartTime = Date.now();
-        this.logger.debug(`[${this.workerId}]: Removing ${messagesToRemove.length} messages from queue`);
-        const result: any = await this.queue.removeBatch(messagesToRemove);
-        const removeDuration = Date.now() - removeStartTime;
-        if (result.failed && result.failed.length > 0) {
-          this.logger.error(`[${this.workerId}]: Failed to remove ${result.failed.length} messages from queue`);
-        }
-        this.logger.debug(`[${this.workerId}]: Removed ${result.successful?.length || 0} messages from queue in ${removeDuration}ms`);
+        await this.removeMessagesFromQueue(messagesToRemove);
       }
 
       if (skippedCount > 0) {
