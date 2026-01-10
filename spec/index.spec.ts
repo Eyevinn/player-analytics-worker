@@ -134,7 +134,8 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).resolves(putItemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -144,7 +145,7 @@ describe('A Worker', () => {
   });
 
   // Try Again if messages = 0
-  it('should receive Queue messages, push to database, remove messages from Queue', async () => {
+  it('should receive Queue messages after retry, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
@@ -160,7 +161,8 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).resolves(putItemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setLoopIterations(2);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(5);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -218,7 +220,8 @@ describe('A Worker', () => {
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(DescribeTableCommand).rejects(itemReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -272,7 +275,8 @@ describe('A Worker', () => {
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -308,7 +312,8 @@ describe('A Worker', () => {
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(DescribeTableCommand).rejects(itemReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -344,7 +349,8 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).rejects(itemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -380,7 +386,8 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).rejects(itemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -442,13 +449,14 @@ describe('A Worker', () => {
     ).and.callThrough();
 
     const testWorker = new Worker({ logger: Logger });
-    
+
     sqsMock.on(ReceiveMessageCommand).callsFake(() => multipleMessagesReply);
     sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(PutItemCommand).resolves(putItemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
 
-    testWorker.setLoopIterations(1);
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
     await testWorker.startAsync();
 
     // Verify basic operations
@@ -457,7 +465,7 @@ describe('A Worker', () => {
     expect(spyGetEvent).toHaveBeenCalled();
     expect(spyRemove).toHaveBeenCalled();
 
-    // Verify batch behavior - should be called twice (once per table)
+    // Verify batch behavior - should be called twice (once per table) in first batch
     expect(spyWrite).toHaveBeenCalledTimes(2);
 
     // Verify the first call was for tenant.one table with 2 events
