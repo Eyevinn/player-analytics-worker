@@ -133,10 +133,10 @@ export class Worker {
       this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS in ${receiveDuration}ms (${this.sqsConcurrentReceives} concurrent receives, ${(collectedMessages.length / (receiveDuration / 1000)).toFixed(1)} msgs/sec)`);
 
       const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
-      let addedCount = 0;
+      const messagesToRemove: any[] = [];
       let skippedCount = 0;
 
-      // Add messages to internal queue and immediately remove from SQS
+      // Add messages to internal queue
       // Table existence check is deferred to the DB consumer for true decoupling
       for (let i = 0; i < allEvents.length; i++) {
         if (!this.internalQueue.hasCapacity(1)) {
@@ -151,20 +151,27 @@ export class Worker {
 
         const added = this.internalQueue.add(collectedMessages[i], eventJson, tableName, i);
         if (added) {
-          // Remove from SQS immediately after adding to internal queue
-          await this.removeFromQueue(collectedMessages[i]);
-          addedCount++;
+          messagesToRemove.push(collectedMessages[i]);
         } else {
           skippedCount++;
           this.logger.error(`[${this.workerId}]: Failed to add message to internal queue despite capacity check`);
         }
       }
 
+      // Remove messages from SQS in parallel
+      if (messagesToRemove.length > 0) {
+        const removeStartTime = Date.now();
+        this.logger.debug(`[${this.workerId}]: Removing ${messagesToRemove.length} messages from SQS`);
+        await Promise.all(messagesToRemove.map(msg => this.removeFromQueue(msg)));
+        const removeDuration = Date.now() - removeStartTime;
+        this.logger.debug(`[${this.workerId}]: Removed ${messagesToRemove.length} messages from SQS in ${removeDuration}ms`);
+      }
+
       if (skippedCount > 0) {
         this.logger.warn(`[${this.workerId}]: Could not process ${skippedCount} messages due to internal queue capacity. Messages remain in SQS for retry.`);
       }
 
-      this.logger.debug(`[${this.workerId}]: Added ${addedCount} messages to internal queue and removed from SQS. Queue size: ${this.internalQueue.getQueueSize()}`);
+      this.logger.debug(`[${this.workerId}]: Added ${messagesToRemove.length} messages to internal queue and removed from SQS. Queue size: ${this.internalQueue.getQueueSize()}`);
     } catch (err) {
       this.logger.error(`[${this.workerId}]: Error processing SQS messages: ${err}`);
     }
