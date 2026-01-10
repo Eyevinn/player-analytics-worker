@@ -322,7 +322,7 @@ describe('A Worker', () => {
     expect(spyRemove).toHaveBeenCalled();
   });
 
-  it('should only remove messages from queue if they have been successfully added to database', async () => {
+  it('should remove messages from SQS immediately after adding to internal queue, even if DB write fails', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
@@ -346,6 +346,7 @@ describe('A Worker', () => {
       },
     };
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(PutItemCommand).rejects(itemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
@@ -356,10 +357,11 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).not.toHaveBeenCalled();
+    // Messages are removed from SQS immediately after adding to internal queue
+    expect(spyRemove).toHaveBeenCalled();
   });
 
-  it('should stop if an unwanted DB error occurs', async () => {
+  it('should requeue failed messages in internal queue when DB error occurs', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
     const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
@@ -383,6 +385,7 @@ describe('A Worker', () => {
       },
     };
     sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
     ddbMock.on(PutItemCommand).rejects(itemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
@@ -393,7 +396,8 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).not.toHaveBeenCalled();
+    // Messages are removed from SQS immediately, failed DB writes are requeued in internal queue
+    expect(spyRemove).toHaveBeenCalled();
     expect(testWorker.state).toEqual(WorkerState.INACTIVE);
   });
 
