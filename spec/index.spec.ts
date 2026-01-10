@@ -227,7 +227,8 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).not.toHaveBeenCalled();
+    // Messages are removed from SQS immediately and requeued internally if table doesn't exist
+    expect(spyRemove).toHaveBeenCalled();
   });
 
   it('should not push item to DB if target table status is not ACTIVE', async () => {
@@ -282,7 +283,8 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).not.toHaveBeenCalled();
+    // Messages are removed from SQS immediately and requeued internally if table is not active
+    expect(spyRemove).toHaveBeenCalled();
   });
 
   it('should remove item from queue if it has expired and the target table does not exist', async () => {
