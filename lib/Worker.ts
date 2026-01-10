@@ -28,16 +28,19 @@ export class Worker {
   workerId: string;
   tablePrefix: string;
   iterations: number;
+  sqsIterations: number;
   maxAge: number;
   sqsPullInterval: number;
   dbProcessInterval: number;
   isPaused: boolean;
   pauseDuration: number;
+  startupJitterMs: number;
   private pausedAt: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
     this.iterations = -1;
+    this.sqsIterations = -1;
     this.tablePrefix = TABLE_PREFIX;
     this.workerId = uuidv4();
     this.state = WorkerState.IDLE;
@@ -50,6 +53,7 @@ export class Worker {
     this.isPaused = false;
     this.pausedAt = 0;
     this.pauseDuration = process.env.PAUSE_DURATION ? parseInt(process.env.PAUSE_DURATION) : 300000; // 5 minutes default
+    this.startupJitterMs = process.env.STARTUP_JITTER_MS ? parseInt(process.env.STARTUP_JITTER_MS) : 5000; // 5 seconds default
   }
 
   resume() {
@@ -72,6 +76,7 @@ export class Worker {
   setLoopIterations(iterations: number) {
     this.logger.warn(`[${this.workerId}]: Setting worker iterations to: ${iterations}`);
     this.iterations = iterations;
+    this.sqsIterations = iterations;
   }
 
   // For unit tests only - set faster intervals for testing
@@ -212,71 +217,36 @@ export class Worker {
     }
   }
 
-  async startAsync() {
-    this.state = WorkerState.ACTIVE;
-    this.logger.info(`[${this.workerId}]: Worker starting with internal queue - SQS pull interval: ${this.sqsPullInterval}ms, DB process interval: ${this.dbProcessInterval}ms`);
+  private async runSQSProducerLoop(): Promise<void> {
+    this.logger.info(`[${this.workerId}]: SQS producer loop started - interval: ${this.sqsPullInterval}ms`);
 
-    let sqsLastRun = 0;
-    let dbLastRun = 0;
     let failedIterations = 0;
     let errorBackoffMs = 1000;
     const maxErrorBackoffMs = 20000;
 
     while (this.state === WorkerState.ACTIVE) {
       if (this.isPaused) {
-        // Check if pause duration has elapsed for auto-resume
-        if (this.pausedAt > 0 && Date.now() - this.pausedAt >= this.pauseDuration) {
-          this.logger.info(`[${this.workerId}]: Auto-resuming worker after ${this.pauseDuration}ms pause`);
-          this.resume();
-        } else {
-          await delay(30000);
-          continue;
-        }
+        await delay(1000);
+        continue;
       }
 
-      // For Unit tests
-      if (this.iterations > 0) this.iterations--;
-      if (this.iterations === 0) this.state = WorkerState.INACTIVE;
-
-      const now = Date.now();
+      // For unit tests - decrement iterations in producer loop
+      if (this.sqsIterations > 0) this.sqsIterations--;
+      if (this.sqsIterations === 0) break;
 
       try {
-        // Process SQS messages at configured interval
-        if (now - sqsLastRun >= this.sqsPullInterval) {
-          await this.processSQSMessages();
-          sqsLastRun = now;
-        }
-
-        // Process internal queue at configured interval
-        if (now - dbLastRun >= this.dbProcessInterval) {
-          await this.processInternalQueue();
-          dbLastRun = now;
-        }
-
-        // Brief delay to prevent tight loops
-        await delay(100);
-
-        // Log queue stats periodically
-        if (now % 30000 < 1000) {
-          const stats = this.internalQueue.getStats();
-          const capacity = this.internalQueue.getAvailableCapacity();
-          if (stats.size > 0) {
-            this.logger.info(`[${this.workerId}]: Internal queue stats - Size: ${stats.size}/${this.internalQueue.maxQueueSize}, Available capacity: ${capacity}, Oldest message: ${stats.oldestMessage}ms`);
-          }
-          if (capacity === 0) {
-            this.logger.warn(`[${this.workerId}]: Internal queue is at capacity! SQS consumption is paused.`);
-          }
-        }
+        await this.processSQSMessages();
 
         failedIterations = 0;
         errorBackoffMs = 1000;
 
+        await delay(this.sqsPullInterval);
       } catch (err) {
-        this.logger.error(`[${this.workerId}]: Error in main loop: ${err}. Retrying in ${errorBackoffMs}ms`);
+        this.logger.error(`[${this.workerId}]: Error in SQS producer loop: ${err}. Retrying in ${errorBackoffMs}ms`);
         failedIterations++;
 
         if (failedIterations > 10) {
-          this.logger.error(`[${this.workerId}]: Too many failed iterations (${failedIterations}). Pausing worker for ${this.pauseDuration}ms.`);
+          this.logger.error(`[${this.workerId}]: Too many SQS failures (${failedIterations}). Pausing worker.`);
           this.pause();
           failedIterations = 0;
         }
@@ -285,6 +255,90 @@ export class Worker {
         errorBackoffMs = Math.min(errorBackoffMs * 2, maxErrorBackoffMs);
       }
     }
+
+    this.logger.info(`[${this.workerId}]: SQS producer loop stopped`);
+  }
+
+  private async runDBConsumerLoop(): Promise<void> {
+    this.logger.info(`[${this.workerId}]: DB consumer loop started - interval: ${this.dbProcessInterval}ms`);
+
+    let failedIterations = 0;
+    let errorBackoffMs = 1000;
+    const maxErrorBackoffMs = 20000;
+    let lastStatsLog = 0;
+
+    while (this.state === WorkerState.ACTIVE) {
+      if (this.isPaused) {
+        // Check if pause duration has elapsed for auto-resume
+        if (this.pausedAt > 0 && Date.now() - this.pausedAt >= this.pauseDuration) {
+          this.logger.info(`[${this.workerId}]: Auto-resuming worker after ${this.pauseDuration}ms pause`);
+          this.resume();
+        } else {
+          await delay(1000);
+          continue;
+        }
+      }
+
+      // For unit tests - decrement iterations in consumer loop
+      if (this.iterations > 0) this.iterations--;
+      if (this.iterations === 0) this.state = WorkerState.INACTIVE;
+
+      try {
+        await this.processInternalQueue();
+
+        // Log queue stats periodically (every 30 seconds)
+        const now = Date.now();
+        if (now - lastStatsLog >= 30000) {
+          const stats = this.internalQueue.getStats();
+          const capacity = this.internalQueue.getAvailableCapacity();
+          if (stats.size > 0) {
+            this.logger.info(`[${this.workerId}]: Internal queue stats - Size: ${stats.size}/${this.internalQueue.maxQueueSize}, Available capacity: ${capacity}, Oldest message: ${stats.oldestMessage}ms`);
+          }
+          if (capacity === 0) {
+            this.logger.warn(`[${this.workerId}]: Internal queue is at capacity! SQS consumption is paused.`);
+          }
+          lastStatsLog = now;
+        }
+
+        failedIterations = 0;
+        errorBackoffMs = 1000;
+
+        await delay(this.dbProcessInterval);
+      } catch (err) {
+        this.logger.error(`[${this.workerId}]: Error in DB consumer loop: ${err}. Retrying in ${errorBackoffMs}ms`);
+        failedIterations++;
+
+        if (failedIterations > 10) {
+          this.logger.error(`[${this.workerId}]: Too many DB failures (${failedIterations}). Pausing worker.`);
+          this.pause();
+          failedIterations = 0;
+        }
+
+        await delay(errorBackoffMs);
+        errorBackoffMs = Math.min(errorBackoffMs * 2, maxErrorBackoffMs);
+      }
+    }
+
+    this.logger.info(`[${this.workerId}]: DB consumer loop stopped`);
+  }
+
+  async startAsync() {
+    this.state = WorkerState.ACTIVE;
+
+    // Apply random startup jitter to spread out worker starts and avoid thundering herd
+    if (this.startupJitterMs > 0 && this.iterations === -1) {
+      const jitter = Math.floor(Math.random() * this.startupJitterMs);
+      this.logger.info(`[${this.workerId}]: Applying startup jitter of ${jitter}ms`);
+      await delay(jitter);
+    }
+
+    this.logger.info(`[${this.workerId}]: Worker starting with concurrent producer/consumer loops - SQS interval: ${this.sqsPullInterval}ms, DB interval: ${this.dbProcessInterval}ms`);
+
+    // Run both loops concurrently - they operate independently
+    await Promise.all([
+      this.runSQSProducerLoop(),
+      this.runDBConsumerLoop()
+    ]);
 
     this.logger.info(`[${this.workerId}]: Worker stopped. Final internal queue size: ${this.internalQueue.getQueueSize()}`);
   }
