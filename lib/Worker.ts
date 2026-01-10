@@ -28,20 +28,20 @@ export class Worker {
   workerId: string;
   tablePrefix: string;
   iterations: number;
-  sqsIterations: number;
+  queueIterations: number;
   maxAge: number;
-  sqsPullInterval: number;
+  queuePullInterval: number;
   dbProcessInterval: number;
   isPaused: boolean;
   pauseDuration: number;
   startupJitterMs: number;
-  sqsConcurrentReceives: number;
+  queueConcurrentReceives: number;
   private pausedAt: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
     this.iterations = -1;
-    this.sqsIterations = -1;
+    this.queueIterations = -1;
     this.tablePrefix = TABLE_PREFIX;
     this.workerId = uuidv4();
     this.state = WorkerState.IDLE;
@@ -49,13 +49,24 @@ export class Worker {
     this.db = new EventDB(opts.logger, this.workerId);
     this.internalQueue = new InternalQueue(opts.logger, this.workerId);
     this.maxAge = process.env.MAX_AGE ? parseInt(process.env.MAX_AGE) : 60000;
-    this.sqsPullInterval = process.env.SQS_PULL_INTERVAL ? parseInt(process.env.SQS_PULL_INTERVAL) : 1000;
+    this.queuePullInterval = this.getEnvWithDeprecation('QUEUE_PULL_INTERVAL', 'SQS_PULL_INTERVAL', 1000);
     this.dbProcessInterval = process.env.DB_PROCESS_INTERVAL ? parseInt(process.env.DB_PROCESS_INTERVAL) : 2000;
     this.isPaused = false;
     this.pausedAt = 0;
     this.pauseDuration = process.env.PAUSE_DURATION ? parseInt(process.env.PAUSE_DURATION) : 300000; // 5 minutes default
     this.startupJitterMs = process.env.STARTUP_JITTER_MS ? parseInt(process.env.STARTUP_JITTER_MS) : 5000; // 5 seconds default
-    this.sqsConcurrentReceives = process.env.SQS_CONCURRENT_RECEIVES ? parseInt(process.env.SQS_CONCURRENT_RECEIVES) : 5;
+    this.queueConcurrentReceives = this.getEnvWithDeprecation('QUEUE_CONCURRENT_RECEIVES', 'SQS_CONCURRENT_RECEIVES', 5);
+  }
+
+  private getEnvWithDeprecation(newName: string, deprecatedName: string, defaultValue: number): number {
+    if (process.env[newName]) {
+      return parseInt(process.env[newName] as string);
+    }
+    if (process.env[deprecatedName]) {
+      this.logger.warn(`[${this.workerId}]: Environment variable ${deprecatedName} is deprecated, use ${newName} instead`);
+      return parseInt(process.env[deprecatedName] as string);
+    }
+    return defaultValue;
   }
 
   resume() {
@@ -78,43 +89,34 @@ export class Worker {
   setLoopIterations(iterations: number) {
     this.logger.warn(`[${this.workerId}]: Setting worker iterations to: ${iterations}`);
     this.iterations = iterations;
-    this.sqsIterations = iterations;
+    this.queueIterations = iterations;
   }
 
   // For unit tests only - set faster intervals for testing
-  setTestIntervals(sqsInterval: number = 100, dbInterval: number = 200) {
-    this.sqsPullInterval = sqsInterval;
+  setTestIntervals(queueInterval: number = 100, dbInterval: number = 200) {
+    this.queuePullInterval = queueInterval;
     this.dbProcessInterval = dbInterval;
-    this.sqsConcurrentReceives = 1; // Use single receive for predictable test behavior
-    this.logger.warn(`[${this.workerId}]: Test mode - SQS interval: ${sqsInterval}ms, DB interval: ${dbInterval}ms`);
+    this.queueConcurrentReceives = 1; // Use single receive for predictable test behavior
+    this.logger.warn(`[${this.workerId}]: Test mode - Queue interval: ${queueInterval}ms, DB interval: ${dbInterval}ms`);
   }
 
-  private async removeFromQueue(message: any) {
+  private async processQueueMessages() {
     try {
-      await this.queue.remove(message);
-      this.logger.debug(`[${this.workerId}]: Removed message from Queue!`);
-    } catch (err) {
-      this.logger.error(`[${this.workerId}]: Error Removing item from Queue!`, err);
-    }
-  }
-
-  private async processSQSMessages() {
-    try {
-      // Check if internal queue has capacity before consuming from SQS
+      // Check if internal queue has capacity before consuming from queue
       if (!this.internalQueue.hasCapacity(1)) {
-        this.logger.debug(`[${this.workerId}]: Internal queue is full (${this.internalQueue.getQueueSize()}/${this.internalQueue.maxQueueSize}). Skipping SQS consumption.`);
+        this.logger.debug(`[${this.workerId}]: Internal queue is full (${this.internalQueue.getQueueSize()}/${this.internalQueue.maxQueueSize}). Skipping queue consumption.`);
         return;
       }
 
-      // Make concurrent receive calls to overcome SQS 10 message limit
+      // Make concurrent receive calls to improve throughput
       const receiveStartTime = Date.now();
-      const receivePromises = Array(this.sqsConcurrentReceives)
+      const receivePromises = Array(this.queueConcurrentReceives)
         .fill(null)
         .map((_, idx) => {
           const startTime = Date.now();
-          this.logger.debug(`[${this.workerId}]: SQS receive #${idx + 1} starting`);
+          this.logger.debug(`[${this.workerId}]: Queue receive #${idx + 1} starting`);
           return this.queue.receive().then((result) => {
-            this.logger.debug(`[${this.workerId}]: SQS receive #${idx + 1} completed in ${Date.now() - startTime}ms`);
+            this.logger.debug(`[${this.workerId}]: Queue receive #${idx + 1} completed in ${Date.now() - startTime}ms`);
             return result;
           });
         });
@@ -126,17 +128,17 @@ export class Worker {
         .flat();
 
       if (collectedMessages.length === 0) {
-        this.logger.debug(`[${this.workerId}]: No messages received from SQS (${receiveDuration}ms)`);
+        this.logger.debug(`[${this.workerId}]: No messages received from queue (${receiveDuration}ms)`);
         return;
       }
 
-      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS in ${receiveDuration}ms (${this.sqsConcurrentReceives} concurrent receives, ${(collectedMessages.length / (receiveDuration / 1000)).toFixed(1)} msgs/sec)`);
+      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from queue in ${receiveDuration}ms (${this.queueConcurrentReceives} concurrent receives, ${(collectedMessages.length / (receiveDuration / 1000)).toFixed(1)} msgs/sec)`);
 
       const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
-      let addedCount = 0;
+      const messagesToRemove: any[] = [];
       let skippedCount = 0;
 
-      // Add messages to internal queue and immediately remove from SQS
+      // Add messages to internal queue
       // Table existence check is deferred to the DB consumer for true decoupling
       for (let i = 0; i < allEvents.length; i++) {
         if (!this.internalQueue.hasCapacity(1)) {
@@ -151,22 +153,32 @@ export class Worker {
 
         const added = this.internalQueue.add(collectedMessages[i], eventJson, tableName, i);
         if (added) {
-          // Remove from SQS immediately after adding to internal queue
-          await this.removeFromQueue(collectedMessages[i]);
-          addedCount++;
+          messagesToRemove.push(collectedMessages[i]);
         } else {
           skippedCount++;
           this.logger.error(`[${this.workerId}]: Failed to add message to internal queue despite capacity check`);
         }
       }
 
-      if (skippedCount > 0) {
-        this.logger.warn(`[${this.workerId}]: Could not process ${skippedCount} messages due to internal queue capacity. Messages remain in SQS for retry.`);
+      // Remove messages from queue using batch API
+      if (messagesToRemove.length > 0) {
+        const removeStartTime = Date.now();
+        this.logger.debug(`[${this.workerId}]: Removing ${messagesToRemove.length} messages from queue`);
+        const result: any = await this.queue.removeBatch(messagesToRemove);
+        const removeDuration = Date.now() - removeStartTime;
+        if (result.failed && result.failed.length > 0) {
+          this.logger.error(`[${this.workerId}]: Failed to remove ${result.failed.length} messages from queue`);
+        }
+        this.logger.debug(`[${this.workerId}]: Removed ${result.successful?.length || 0} messages from queue in ${removeDuration}ms`);
       }
 
-      this.logger.debug(`[${this.workerId}]: Added ${addedCount} messages to internal queue and removed from SQS. Queue size: ${this.internalQueue.getQueueSize()}`);
+      if (skippedCount > 0) {
+        this.logger.warn(`[${this.workerId}]: Could not process ${skippedCount} messages due to internal queue capacity. Messages remain in queue for retry.`);
+      }
+
+      this.logger.debug(`[${this.workerId}]: Added ${messagesToRemove.length} messages to internal queue and removed from queue. Queue size: ${this.internalQueue.getQueueSize()}`);
     } catch (err) {
-      this.logger.error(`[${this.workerId}]: Error processing SQS messages: ${err}`);
+      this.logger.error(`[${this.workerId}]: Error processing queue messages: ${err}`);
     }
   }
 
@@ -245,8 +257,8 @@ export class Worker {
     }
   }
 
-  private async runSQSProducerLoop(): Promise<void> {
-    this.logger.info(`[${this.workerId}]: SQS producer loop started - interval: ${this.sqsPullInterval}ms`);
+  private async runQueueProducerLoop(): Promise<void> {
+    this.logger.info(`[${this.workerId}]: Queue producer loop started - interval: ${this.queuePullInterval}ms`);
 
     let failedIterations = 0;
     let errorBackoffMs = 1000;
@@ -259,22 +271,22 @@ export class Worker {
       }
 
       // For unit tests - decrement iterations in producer loop
-      if (this.sqsIterations > 0) this.sqsIterations--;
-      if (this.sqsIterations === 0) break;
+      if (this.queueIterations > 0) this.queueIterations--;
+      if (this.queueIterations === 0) break;
 
       try {
-        await this.processSQSMessages();
+        await this.processQueueMessages();
 
         failedIterations = 0;
         errorBackoffMs = 1000;
 
-        await delay(this.sqsPullInterval);
+        await delay(this.queuePullInterval);
       } catch (err) {
-        this.logger.error(`[${this.workerId}]: Error in SQS producer loop: ${err}. Retrying in ${errorBackoffMs}ms`);
+        this.logger.error(`[${this.workerId}]: Error in queue producer loop: ${err}. Retrying in ${errorBackoffMs}ms`);
         failedIterations++;
 
         if (failedIterations > 10) {
-          this.logger.error(`[${this.workerId}]: Too many SQS failures (${failedIterations}). Pausing worker.`);
+          this.logger.error(`[${this.workerId}]: Too many queue failures (${failedIterations}). Pausing worker.`);
           this.pause();
           failedIterations = 0;
         }
@@ -284,7 +296,7 @@ export class Worker {
       }
     }
 
-    this.logger.info(`[${this.workerId}]: SQS producer loop stopped`);
+    this.logger.info(`[${this.workerId}]: Queue producer loop stopped`);
   }
 
   private async runDBConsumerLoop(): Promise<void> {
@@ -323,7 +335,7 @@ export class Worker {
             this.logger.info(`[${this.workerId}]: Internal queue stats - Size: ${stats.size}/${this.internalQueue.maxQueueSize}, Available capacity: ${capacity}, Oldest message: ${stats.oldestMessage}ms`);
           }
           if (capacity === 0) {
-            this.logger.warn(`[${this.workerId}]: Internal queue is at capacity! SQS consumption is paused.`);
+            this.logger.warn(`[${this.workerId}]: Internal queue is at capacity! Queue consumption is paused.`);
           }
           lastStatsLog = now;
         }
@@ -360,11 +372,11 @@ export class Worker {
       await delay(jitter);
     }
 
-    this.logger.info(`[${this.workerId}]: Worker starting with concurrent producer/consumer loops - SQS interval: ${this.sqsPullInterval}ms, DB interval: ${this.dbProcessInterval}ms`);
+    this.logger.info(`[${this.workerId}]: Worker starting with concurrent producer/consumer loops - Queue interval: ${this.queuePullInterval}ms, DB interval: ${this.dbProcessInterval}ms`);
 
     // Run both loops concurrently - they operate independently
     await Promise.all([
-      this.runSQSProducerLoop(),
+      this.runQueueProducerLoop(),
       this.runDBConsumerLoop()
     ]);
 

@@ -58,6 +58,17 @@ export default class Queue {
     }
   }
 
+  public async removeBatch(messages: Object[]): Promise<Object> {
+    try {
+      await this.getQueueAdapter();
+      const queueResponse = await this.QueueAdapter.removeFromQueueBatch(messages);
+      return queueResponse;
+    } catch (err) {
+      this.logger.error(`[${this.instanceId}]: ${err}`);
+      throw new Error(err);
+    }
+  }
+
   public getEventJSONsFromMessages(messages: any[]): any[] {
     return this.QueueAdapter.getEventJSONsFromMessages(messages);
   }

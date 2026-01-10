@@ -121,7 +121,7 @@ describe('A Worker', () => {
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -141,14 +141,14 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   // Try Again if messages = 0
   it('should receive Queue messages after retry, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -168,7 +168,7 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   it('should not push item to DB if target table does not exist', async () => {
@@ -209,7 +209,7 @@ describe('A Worker', () => {
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -228,7 +228,7 @@ describe('A Worker', () => {
     expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     // Messages are removed from SQS immediately and requeued internally if table doesn't exist
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   it('should not push item to DB if target table status is not ACTIVE', async () => {
@@ -265,7 +265,7 @@ describe('A Worker', () => {
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -284,7 +284,7 @@ describe('A Worker', () => {
     expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     // Messages are removed from SQS immediately and requeued internally if table is not active
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   it('should remove item from queue if it has expired and the target table does not exist', async () => {
@@ -303,7 +303,7 @@ describe('A Worker', () => {
     };
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -321,13 +321,13 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).not.toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   it('should remove messages from SQS immediately after adding to internal queue, even if DB write fails', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -360,13 +360,13 @@ describe('A Worker', () => {
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     // Messages are removed from SQS immediately after adding to internal queue
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
   it('should requeue failed messages in internal queue when DB error occurs', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -399,7 +399,7 @@ describe('A Worker', () => {
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
     // Messages are removed from SQS immediately, failed DB writes are requeued in internal queue
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
     expect(testWorker.state).toEqual(WorkerState.INACTIVE);
   });
 
@@ -448,7 +448,7 @@ describe('A Worker', () => {
 
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
-    const spyRemove = spyOn(Queue.prototype, 'remove').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
     const spyGetEvent = spyOn(
       Queue.prototype,
       'getEventJSONsFromMessages'
@@ -469,7 +469,7 @@ describe('A Worker', () => {
     expect(spyTableExists).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
     expect(spyGetEvent).toHaveBeenCalled();
-    expect(spyRemove).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
 
     // Verify batch behavior - should be called twice (once per table) in first batch
     expect(spyWrite).toHaveBeenCalledTimes(2);
