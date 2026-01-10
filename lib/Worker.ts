@@ -108,12 +108,14 @@ export class Worker {
 
       // Make concurrent receive calls to overcome SQS 10 message limit
       const receiveStartTime = Date.now();
+      this.logger.debug(`[${this.workerId}]: Starting ${this.sqsConcurrentReceives} concurrent SQS receive calls`);
       const receivePromises = Array(this.sqsConcurrentReceives)
         .fill(null)
         .map(() => this.queue.receive());
 
       const results = await Promise.all(receivePromises);
       const receiveDuration = Date.now() - receiveStartTime;
+      this.logger.debug(`[${this.workerId}]: SQS receive completed in ${receiveDuration}ms`);
       const collectedMessages: any[] = results
         .filter(Array.isArray)
         .flat();
