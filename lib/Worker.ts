@@ -107,21 +107,23 @@ export class Worker {
       }
 
       // Make concurrent receive calls to overcome SQS 10 message limit
+      const receiveStartTime = Date.now();
       const receivePromises = Array(this.sqsConcurrentReceives)
         .fill(null)
         .map(() => this.queue.receive());
 
       const results = await Promise.all(receivePromises);
+      const receiveDuration = Date.now() - receiveStartTime;
       const collectedMessages: any[] = results
         .filter(Array.isArray)
         .flat();
 
       if (collectedMessages.length === 0) {
-        this.logger.debug(`[${this.workerId}]: No messages received from SQS`);
+        this.logger.debug(`[${this.workerId}]: No messages received from SQS (${receiveDuration}ms)`);
         return;
       }
 
-      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS (${this.sqsConcurrentReceives} concurrent receives)`);
+      this.logger.debug(`[${this.workerId}]: Retrieved ${collectedMessages.length} messages from SQS in ${receiveDuration}ms (${this.sqsConcurrentReceives} concurrent receives, ${(collectedMessages.length / (receiveDuration / 1000)).toFixed(1)} msgs/sec)`);
 
       const allEvents: any[] = this.queue.getEventJSONsFromMessages(collectedMessages);
       let addedCount = 0;
