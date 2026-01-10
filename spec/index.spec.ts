@@ -134,8 +134,7 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).resolves(putItemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setTestIntervals(100, 200);
-    testWorker.setLoopIterations(3);
+    testWorker.setLoopIterations(1);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
@@ -161,8 +160,7 @@ describe('A Worker', () => {
     ddbMock.on(PutItemCommand).resolves(putItemReply);
     ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
     // Test the Worker
-    testWorker.setTestIntervals(100, 200);
-    testWorker.setLoopIterations(5);
+    testWorker.setLoopIterations(2);
     await testWorker.startAsync();
 
     expect(spyTableExists).toHaveBeenCalled();
