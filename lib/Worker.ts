@@ -19,6 +19,11 @@ export enum WorkerState {
   INACTIVE = 'inactive'
 }
 
+interface PendingRemoval {
+  message: any;
+  retryCount: number;
+}
+
 export class Worker {
   logger: winston.Logger;
   queue: any;
@@ -39,6 +44,8 @@ export class Worker {
   private pausedAt: number;
   private batchRemoveFailures: number;
   private useBatchRemove: boolean;
+  private pendingRemovals: PendingRemoval[];
+  private maxRemovalRetries: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -60,6 +67,8 @@ export class Worker {
     this.queueConcurrentReceives = this.getEnvWithDeprecation('QUEUE_CONCURRENT_RECEIVES', 'SQS_CONCURRENT_RECEIVES', 5);
     this.batchRemoveFailures = 0;
     this.useBatchRemove = true;
+    this.pendingRemovals = [];
+    this.maxRemovalRetries = 3;
   }
 
   private getEnvWithDeprecation(newName: string, deprecatedName: string, defaultValue: number): number {
@@ -117,32 +126,95 @@ export class Worker {
     }
   }
 
-  private async removeMessagesIndividually(messages: any[]): Promise<{ successful: number; failed: number }> {
-    const results = await Promise.all(messages.map((msg, idx) => this.removeFromQueue(msg, idx)));
-    const successful = results.filter(r => r).length;
-    const failed = results.filter(r => !r).length;
+  private async removeMessagesIndividually(messages: any[]): Promise<{ successful: any[]; failed: any[] }> {
+    const results = await Promise.all(
+      messages.map(async (msg, idx) => ({
+        message: msg,
+        success: await this.removeFromQueue(msg, idx)
+      }))
+    );
+    const successful = results.filter(r => r.success).map(r => r.message);
+    const failed = results.filter(r => !r.success).map(r => r.message);
     return { successful, failed };
   }
 
+  private async processPendingRemovals(): Promise<void> {
+    if (this.pendingRemovals.length === 0) {
+      return;
+    }
+
+    this.logger.debug(`[${this.workerId}]: Retrying ${this.pendingRemovals.length} pending removals`);
+
+    const messages = this.pendingRemovals.map(p => p.message);
+    const result = await this.removeMessagesIndividually(messages);
+
+    // Update pending removals - remove successful ones, increment retry count for failed
+    const failedSet = new Set(result.failed);
+    const newPendingRemovals: PendingRemoval[] = [];
+
+    for (const pending of this.pendingRemovals) {
+      if (failedSet.has(pending.message)) {
+        pending.retryCount++;
+        if (pending.retryCount < this.maxRemovalRetries) {
+          newPendingRemovals.push(pending);
+        } else {
+          this.logger.error(`[${this.workerId}]: Message removal failed after ${this.maxRemovalRetries} retries, giving up`);
+        }
+      }
+    }
+
+    this.pendingRemovals = newPendingRemovals;
+
+    if (result.successful.length > 0) {
+      this.logger.debug(`[${this.workerId}]: Successfully removed ${result.successful.length} previously failed messages`);
+    }
+    if (newPendingRemovals.length > 0) {
+      this.logger.debug(`[${this.workerId}]: ${newPendingRemovals.length} messages still pending removal`);
+    }
+  }
+
   private async removeMessagesFromQueue(messages: any[]): Promise<void> {
+    // First, process any pending removals from previous failures
+    await this.processPendingRemovals();
+
+    if (messages.length === 0) {
+      return;
+    }
+
     const removeStartTime = Date.now();
     this.logger.debug(`[${this.workerId}]: Removing ${messages.length} messages from queue`);
 
-    let successful = 0;
-    let failed = 0;
+    let successfulMessages: any[] = [];
+    let failedMessages: any[] = [];
 
     if (this.useBatchRemove) {
+      let batchFailed = false;
       try {
         const result: any = await this.queue.removeBatch(messages);
-        successful = result.successful?.length || 0;
-        failed = result.failed?.length || 0;
+        const successCount = result.successful?.length || 0;
+        const failCount = result.failed?.length || 0;
 
-        if (failed > 0) {
-          this.logger.error(`[${this.workerId}]: Failed to remove ${failed} messages from queue`);
+        // If all messages failed, treat as batch removal not supported
+        if (failCount === messages.length && successCount === 0) {
+          batchFailed = true;
+          failedMessages = messages;
+          this.logger.warn(`[${this.workerId}]: Batch remove returned all ${failCount} messages as failed`);
+        } else {
+          successfulMessages = result.successful || [];
+          failedMessages = result.failed || [];
+          if (failCount > 0) {
+            this.logger.error(`[${this.workerId}]: Failed to remove ${failCount} messages from queue`);
+          }
         }
       } catch (err) {
+        batchFailed = true;
+        failedMessages = messages;
+        this.logger.warn(`[${this.workerId}]: Batch remove threw error: ${err}`);
+      }
+
+      if (batchFailed) {
         this.batchRemoveFailures++;
-        this.logger.warn(`[${this.workerId}]: Batch remove failed (attempt ${this.batchRemoveFailures}/3), falling back to individual removes: ${err}`);
+        this.logger.warn(`[${this.workerId}]: Batch remove failed (attempt ${this.batchRemoveFailures}/3), falling back to individual removes`);
 
         if (this.batchRemoveFailures >= 3) {
           this.logger.warn(`[${this.workerId}]: Batch remove failed 3 times, permanently disabling batch removal`);
@@ -151,18 +223,26 @@ export class Worker {
 
         // Fall back to individual removes
         const fallbackResult = await this.removeMessagesIndividually(messages);
-        successful = fallbackResult.successful;
-        failed = fallbackResult.failed;
+        successfulMessages = fallbackResult.successful;
+        failedMessages = fallbackResult.failed;
       }
     } else {
       // Batch remove is disabled, use individual removes
       const result = await this.removeMessagesIndividually(messages);
-      successful = result.successful;
-      failed = result.failed;
+      successfulMessages = result.successful;
+      failedMessages = result.failed;
+    }
+
+    // Track failed messages for retry
+    if (failedMessages.length > 0) {
+      for (const msg of failedMessages) {
+        this.pendingRemovals.push({ message: msg, retryCount: 1 });
+      }
+      this.logger.warn(`[${this.workerId}]: Added ${failedMessages.length} messages to pending removals for retry`);
     }
 
     const removeDuration = Date.now() - removeStartTime;
-    this.logger.debug(`[${this.workerId}]: Removed ${successful} messages from queue in ${removeDuration}ms${failed > 0 ? ` (${failed} failed)` : ''}`);
+    this.logger.debug(`[${this.workerId}]: Removed ${successfulMessages.length} messages from queue in ${removeDuration}ms${failedMessages.length > 0 ? ` (${failedMessages.length} failed, will retry)` : ''}`);
   }
 
   private async processQueueMessages() {
