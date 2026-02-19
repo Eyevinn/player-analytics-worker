@@ -118,6 +118,46 @@ describe('A Worker', () => {
     expect(workerA.workerId).not.toBe(workerB.workerId);
   });
 
+  it('should generate unique IDs for multiple workers', async () => {
+    const workerA = new Worker({ logger: Logger });
+    const workerB = new Worker({ logger: Logger });
+    const workerC = new Worker({ logger: Logger });
+
+    const workerIds = [workerA.workerId, workerB.workerId, workerC.workerId];
+    const uniqueIds = new Set(workerIds);
+
+    expect(uniqueIds.size).toBe(3);
+    expect(workerA.workerId).not.toBe(workerB.workerId);
+    expect(workerB.workerId).not.toBe(workerC.workerId);
+    expect(workerA.workerId).not.toBe(workerC.workerId);
+  });
+
+  it('should transition to IDLE state when stop is called by setting iterations to 0', async () => {
+    const testWorker = new Worker({ logger: Logger });
+
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[0]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    expect(testWorker.state).toBe(WorkerState.IDLE);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
+
+    // Start worker asynchronously
+    const workerPromise = testWorker.startAsync();
+
+    // Worker should be active after start
+    expect(testWorker.state).toBe(WorkerState.ACTIVE);
+
+    // Wait for worker to complete its iterations
+    await workerPromise;
+
+    // After iterations complete, worker should transition to INACTIVE
+    expect(testWorker.state).toBe(WorkerState.INACTIVE);
+  });
+
   it('should receive Queue messages, push to database, remove messages from Queue', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
