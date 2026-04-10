@@ -13,6 +13,7 @@ export default class InternalQueue {
   private logger: winston.Logger;
   private instanceId: string;
   private queue: QueuedMessage[] = [];
+  private headIndex: number = 0;
   private batchSize: number;
   private processingInterval: number;
   private maxRetries: number;
@@ -52,25 +53,46 @@ export default class InternalQueue {
     return true;
   }
 
+  private get size(): number {
+    return this.queue.length - this.headIndex;
+  }
+
+  /**
+   * Compact the internal array when the consumed portion exceeds half
+   * the total array length. This keeps memory bounded while avoiding
+   * O(n) shifts on every getBatch() call.
+   */
+  private compact(): void {
+    if (this.headIndex > 0 && this.headIndex > this.queue.length / 2) {
+      this.queue = this.queue.slice(this.headIndex);
+      this.headIndex = 0;
+    }
+  }
+
   public hasCapacity(count: number = 1): boolean {
-    return (this.queue.length + count) <= this.maxQueueSize;
+    return (this.size + count) <= this.maxQueueSize;
   }
 
   public getAvailableCapacity(): number {
-    return Math.max(0, this.maxQueueSize - this.queue.length);
+    return Math.max(0, this.maxQueueSize - this.size);
   }
 
   public getQueueSize(): number {
-    return this.queue.length;
+    return this.size;
   }
 
   public getBatch(): QueuedMessage[] {
-    if (this.queue.length === 0) {
+    if (this.size === 0) {
       return [];
     }
 
-    const batch = this.queue.splice(0, Math.min(this.batchSize, this.queue.length));
-    this.logger.debug(`[${this.instanceId}]: Retrieved batch of ${batch.length} messages. Remaining: ${this.queue.length}`);
+    const batchEnd = this.headIndex + Math.min(this.batchSize, this.size);
+    const batch = this.queue.slice(this.headIndex, batchEnd);
+    this.headIndex = batchEnd;
+
+    this.compact();
+
+    this.logger.debug(`[${this.instanceId}]: Retrieved batch of ${batch.length} messages. Remaining: ${this.size}`);
     return batch;
   }
 
@@ -84,7 +106,18 @@ export default class InternalQueue {
       return true;
     });
 
-    this.queue.unshift(...requeueableMessages);
+    // Prepend requeued messages before the head
+    if (this.headIndex >= requeueableMessages.length) {
+      // Space before head — fill it in
+      for (let i = requeueableMessages.length - 1; i >= 0; i--) {
+        this.queue[--this.headIndex] = requeueableMessages[i];
+      }
+    } else {
+      // No space — compact first, then unshift
+      this.queue = this.queue.slice(this.headIndex);
+      this.headIndex = 0;
+      this.queue.unshift(...requeueableMessages);
+    }
     this.logger.debug(`[${this.instanceId}]: Requeued ${requeueableMessages.length} messages`);
   }
 
@@ -102,22 +135,24 @@ export default class InternalQueue {
   }
 
   public isEmpty(): boolean {
-    return this.queue.length === 0;
+    return this.size === 0;
   }
 
   public clear(): void {
     this.queue = [];
+    this.headIndex = 0;
     this.logger.debug(`[${this.instanceId}]: Internal queue cleared`);
   }
 
   public getStats(): { size: number, oldestMessage: number | null } {
-    if (this.queue.length === 0) {
+    if (this.size === 0) {
       return { size: 0, oldestMessage: null };
     }
 
-    const oldestMessage = Math.min(...this.queue.map(msg => msg.addedAt));
+    const activeQueue = this.queue.slice(this.headIndex);
+    const oldestMessage = Math.min(...activeQueue.map(msg => msg.addedAt));
     return {
-      size: this.queue.length,
+      size: this.size,
       oldestMessage: Date.now() - oldestMessage
     };
   }
