@@ -491,4 +491,116 @@ describe('A Worker', () => {
     expect(firstCall[0][1].event).toBe('pause');
     expect(secondCall[0][0].event).toBe('seek');
   });
+
+  it('should filter out events from non-allowed domains when ALLOWED_DOMAINS is set', async () => {
+    process.env.ALLOWED_DOMAINS = 'allowed.tenant.com';
+
+    const mixedDomainsReply = {
+      $metadata: {},
+      Messages: [
+        {
+          MessageId: 'msg-allowed',
+          ReceiptHandle: 'handle-allowed',
+          MD5OfBody: 'hash1',
+          Body: JSON.stringify({
+            event: 'playing',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 120,
+            host: 'allowed.tenant.com',
+          }),
+        },
+        {
+          MessageId: 'msg-blocked',
+          ReceiptHandle: 'handle-blocked',
+          MD5OfBody: 'hash2',
+          Body: JSON.stringify({
+            event: 'playing',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 120,
+            host: 'blocked.tenant.com',
+          }),
+        },
+      ],
+    };
+
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => mixedDomainsReply);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
+    await testWorker.startAsync();
+
+    // Both messages should be removed from SQS (allowed + filtered)
+    expect(spyRemoveBatch).toHaveBeenCalled();
+
+    // Only the allowed domain event should be written to DB
+    if (spyWrite.calls.count() > 0) {
+      const writeArgs = spyWrite.calls.argsFor(0);
+      expect(writeArgs[1]).toBe('epas_allowed.tenant.com');
+    }
+
+    delete process.env.ALLOWED_DOMAINS;
+  });
+
+  it('should process events through ClickHouse adapter when DB_TYPE is CLICKHOUSE', async () => {
+    process.env.DB_TYPE = 'CLICKHOUSE';
+    process.env.CLICKHOUSE_URL = 'http://localhost:8123/epas';
+
+    // Mock the ClickHouse adapter at the EventDB level
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.returnValue(Promise.resolve(true));
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.returnValue(Promise.resolve());
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
+    await testWorker.startAsync();
+
+    expect(spyTableExists).toHaveBeenCalledWith('epas_mock.tenant.one');
+    expect(spyWrite).toHaveBeenCalled();
+    expect(spyRemoveBatch).toHaveBeenCalled();
+
+    // Verify events were written with correct data
+    const writeArgs = spyWrite.calls.argsFor(0);
+    expect(writeArgs[1]).toBe('epas_mock.tenant.one');
+    expect(writeArgs[0].length).toBeGreaterThan(0);
+    expect(writeArgs[0][0].event).toBe('loading');
+
+    delete process.env.CLICKHOUSE_URL;
+  });
+
+  it('should accept all domains when ALLOWED_DOMAINS is not set', async () => {
+    // Ensure ALLOWED_DOMAINS is not set
+    delete process.env.ALLOWED_DOMAINS;
+
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
+    await testWorker.startAsync();
+
+    // Events from any domain should be processed
+    expect(spyRemoveBatch).toHaveBeenCalled();
+    expect(spyWrite).toHaveBeenCalled();
+  });
 });

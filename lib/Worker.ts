@@ -46,6 +46,8 @@ export class Worker {
   private useBatchRemove: boolean;
   private pendingRemovals: PendingRemoval[];
   private maxRemovalRetries: number;
+  private allowedDomains: string[] | null;
+  private startPromise: Promise<void> | null;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -69,6 +71,14 @@ export class Worker {
     this.useBatchRemove = true;
     this.pendingRemovals = [];
     this.maxRemovalRetries = 3;
+    this.allowedDomains = process.env.ALLOWED_DOMAINS
+      ? process.env.ALLOWED_DOMAINS.split(',').map((d) => d.trim()).filter(Boolean)
+      : null;
+    this.startPromise = null;
+
+    if (this.allowedDomains) {
+      this.logger.info(`[${this.workerId}]: Domain filtering enabled. Allowed: ${this.allowedDomains.join(', ')}`);
+    }
   }
 
   private getEnvWithDeprecation(newName: string, deprecatedName: string, defaultValue: number): number {
@@ -294,6 +304,15 @@ export class Worker {
 
         const eventJson = allEvents[i];
         const shardId = eventJson.shardId ? eventJson.shardId : (eventJson.host ? eventJson.host : 'default');
+
+        // Domain filtering: skip events from non-allowed domains
+        if (this.allowedDomains && !this.allowedDomains.includes(shardId)) {
+          this.logger.debug(`[${this.workerId}]: Filtering out event from domain '${shardId}' (not in ALLOWED_DOMAINS)`);
+          messagesToRemove.push(collectedMessages[i]);
+          skippedCount++;
+          continue;
+        }
+
         const tableName: string = this.tablePrefix + shardId;
 
         const added = this.internalQueue.add(collectedMessages[i], eventJson, tableName, i);
@@ -513,11 +532,25 @@ export class Worker {
     this.logger.info(`[${this.workerId}]: Worker starting with concurrent producer/consumer loops - Queue interval: ${this.queuePullInterval}ms, DB interval: ${this.dbProcessInterval}ms`);
 
     // Run both loops concurrently - they operate independently
-    await Promise.all([
+    this.startPromise = Promise.all([
       this.runQueueProducerLoop(),
       this.runDBConsumerLoop()
-    ]);
+    ]).then(() => {});
+
+    await this.startPromise;
 
     this.logger.info(`[${this.workerId}]: Worker stopped. Final internal queue size: ${this.internalQueue.getQueueSize()}`);
+  }
+
+  /**
+   * Gracefully stop the worker. Sets state to INACTIVE so both loops
+   * exit after their current iteration, then waits for them to finish.
+   */
+  async stop(): Promise<void> {
+    this.logger.info(`[${this.workerId}]: Stop requested`);
+    this.state = WorkerState.INACTIVE;
+    if (this.startPromise) {
+      await this.startPromise;
+    }
   }
 }
