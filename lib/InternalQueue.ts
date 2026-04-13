@@ -17,7 +17,7 @@ export default class InternalQueue {
   private processingInterval: number;
   private maxRetries: number;
   public maxQueueSize: number;
-  private isProcessing: boolean = false;
+  private isProcessing = false;
 
   constructor(logger: winston.Logger, instanceId: string) {
     this.logger = logger;
@@ -52,7 +52,7 @@ export default class InternalQueue {
     return true;
   }
 
-  public hasCapacity(count: number = 1): boolean {
+  public hasCapacity(count = 1): boolean {
     return (this.queue.length + count) <= this.maxQueueSize;
   }
 
