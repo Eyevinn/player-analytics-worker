@@ -106,7 +106,7 @@ export class Worker {
   }
 
   // For unit tests only - set faster intervals for testing
-  setTestIntervals(queueInterval: number = 100, dbInterval: number = 200) {
+  setTestIntervals(queueInterval = 100, dbInterval = 200) {
     this.queuePullInterval = queueInterval;
     this.dbProcessInterval = dbInterval;
     this.queueConcurrentReceives = 1; // Use single receive for predictable test behavior
