@@ -37,6 +37,31 @@ describe('InternalQueue', () => {
       expect(added).toBe(false);
       expect(queue.getQueueSize()).toBe(2);
     });
+
+    it('should accept after getBatch consumes, even before compaction', () => {
+      // Batch size small enough that consumption doesn't trigger compact()
+      // (compact only runs when headIndex > queue.length/2)
+      process.env.INTERNAL_QUEUE_BATCH_SIZE = '1';
+      queue = new InternalQueue(Logger, 'test-capacity');
+      queue.maxQueueSize = 3;
+
+      queue.add({}, {}, 'table', 0);
+      queue.add({}, {}, 'table', 1);
+      queue.add({}, {}, 'table', 2);
+      expect(queue.getQueueSize()).toBe(3);
+      expect(queue.hasCapacity(1)).toBe(false);
+
+      // Consume 1 item — headIndex now 1, queue.length still 3
+      // (no compaction because 1 !> 3/2)
+      queue.getBatch();
+      expect(queue.getQueueSize()).toBe(2);
+      expect(queue.hasCapacity(1)).toBe(true);
+
+      // add() must use active size, not raw queue.length, else it would reject
+      const added = queue.add({}, {}, 'table', 3);
+      expect(added).toBe(true);
+      expect(queue.getQueueSize()).toBe(3);
+    });
   });
 
   describe('getBatch()', () => {

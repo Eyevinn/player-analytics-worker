@@ -71,9 +71,18 @@ export class Worker {
     this.useBatchRemove = true;
     this.pendingRemovals = [];
     this.maxRemovalRetries = 3;
-    this.allowedDomains = process.env.ALLOWED_DOMAINS
-      ? process.env.ALLOWED_DOMAINS.split(',').map((d) => d.trim()).filter(Boolean)
-      : null;
+    // Parse ALLOWED_DOMAINS. If the env var is empty or contains only
+    // whitespace/commas (e.g. "", " ", ",,"), treat as "no filter" rather
+    // than an empty allowlist (which would drop all events).
+    if (process.env.ALLOWED_DOMAINS) {
+      const parsed = process.env.ALLOWED_DOMAINS
+        .split(',')
+        .map((d) => d.trim())
+        .filter(Boolean);
+      this.allowedDomains = parsed.length > 0 ? parsed : null;
+    } else {
+      this.allowedDomains = null;
+    }
     this.startPromise = null;
 
     if (this.allowedDomains) {

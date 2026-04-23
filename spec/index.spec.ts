@@ -603,4 +603,28 @@ describe('A Worker', () => {
     expect(spyRemoveBatch).toHaveBeenCalled();
     expect(spyWrite).toHaveBeenCalled();
   });
+
+  it('should treat empty/whitespace ALLOWED_DOMAINS as disabled filtering (not drop all events)', async () => {
+    // Edge case: env var is present but parses to an empty list after trim+filter
+    process.env.ALLOWED_DOMAINS = ' , ,,  ';
+
+    const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.callThrough();
+    const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(2);
+    await testWorker.startAsync();
+
+    // Events should still be written to DB — not dropped
+    expect(spyWrite).toHaveBeenCalled();
+
+    delete process.env.ALLOWED_DOMAINS;
+  });
 });

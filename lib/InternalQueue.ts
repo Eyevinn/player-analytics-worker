@@ -34,7 +34,10 @@ export default class InternalQueue {
   }
 
   public add(message: any, event: any, tableName: string, messageIndex: number): boolean {
-    if (this.queue.length >= this.maxQueueSize) {
+    // Use active size (head-index aware) to stay consistent with hasCapacity().
+    // Otherwise hasCapacity() could report free space while add() rejects,
+    // causing the worker to repeatedly re-fetch the same messages.
+    if (this.size >= this.maxQueueSize) {
       this.logger.warn(`[${this.instanceId}]: Internal queue is full (${this.maxQueueSize}). Cannot add message.`);
       return false;
     }
@@ -49,7 +52,7 @@ export default class InternalQueue {
     };
 
     this.queue.push(queuedMessage);
-    this.logger.debug(`[${this.instanceId}]: Added message to internal queue. Queue size: ${this.queue.length}`);
+    this.logger.debug(`[${this.instanceId}]: Added message to internal queue. Queue size: ${this.size}`);
     return true;
   }
 
