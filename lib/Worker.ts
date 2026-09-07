@@ -544,7 +544,9 @@ export class Worker {
     this.startPromise = Promise.all([
       this.runQueueProducerLoop(),
       this.runDBConsumerLoop()
-    ]).then(() => {});
+    ]).then(() => {
+      /* collapse Promise.all results to Promise<void> */
+    });
 
     await this.startPromise;
 

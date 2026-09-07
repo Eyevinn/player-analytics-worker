@@ -3,7 +3,7 @@ import InternalQueue from '../lib/InternalQueue';
 
 Logger.silent = true;
 
-function makeMessage(event: string, table: string, index: number = 0) {
+function makeMessage(event: string, table: string, index = 0) {
   return {
     message: { MessageId: `msg-${index}` },
     event: { event, timestamp: Date.now() },

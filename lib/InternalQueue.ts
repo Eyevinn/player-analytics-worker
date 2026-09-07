@@ -13,7 +13,7 @@ export default class InternalQueue {
   private logger: winston.Logger;
   private instanceId: string;
   private queue: QueuedMessage[] = [];
-  private headIndex: number = 0;
+  private headIndex = 0;
   private batchSize: number;
   private processingInterval: number;
   private maxRetries: number;
@@ -72,7 +72,7 @@ export default class InternalQueue {
     }
   }
 
-  public hasCapacity(count: number = 1): boolean {
+  public hasCapacity(count = 1): boolean {
     return (this.size + count) <= this.maxQueueSize;
   }
 
