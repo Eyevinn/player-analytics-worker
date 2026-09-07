@@ -14,3 +14,18 @@ for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
 }
 
 myWorkers.map((worker) => worker.startAsync());
+
+// Graceful shutdown on SIGTERM/SIGINT (e.g., Docker stop, Ctrl+C)
+async function gracefulShutdown(signal: string) {
+  Logger.info(`Received ${signal}. Stopping ${myWorkers.length} worker(s)...`);
+  try {
+    await Promise.all(myWorkers.map((w) => w.stop()));
+    Logger.info('All workers stopped gracefully.');
+  } catch (err) {
+    Logger.error('Error during graceful shutdown:', err);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

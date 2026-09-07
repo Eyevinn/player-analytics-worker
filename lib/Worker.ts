@@ -46,6 +46,8 @@ export class Worker {
   private useBatchRemove: boolean;
   private pendingRemovals: PendingRemoval[];
   private maxRemovalRetries: number;
+  private allowedDomains: string[] | null;
+  private startPromise: Promise<void> | null;
   private discardedEventCount: number;
 
   constructor(opts: IWorkerOptions) {
@@ -70,7 +72,24 @@ export class Worker {
     this.useBatchRemove = true;
     this.pendingRemovals = [];
     this.maxRemovalRetries = 3;
+    // Parse ALLOWED_DOMAINS. If the env var is empty or contains only
+    // whitespace/commas (e.g. "", " ", ",,"), treat as "no filter" rather
+    // than an empty allowlist (which would drop all events).
+    if (process.env.ALLOWED_DOMAINS) {
+      const parsed = process.env.ALLOWED_DOMAINS
+        .split(',')
+        .map((d) => d.trim())
+        .filter(Boolean);
+      this.allowedDomains = parsed.length > 0 ? parsed : null;
+    } else {
+      this.allowedDomains = null;
+    }
+    this.startPromise = null;
     this.discardedEventCount = 0;
+
+    if (this.allowedDomains) {
+      this.logger.info(`[${this.workerId}]: Domain filtering enabled. Allowed: ${this.allowedDomains.join(', ')}`);
+    }
   }
 
   // Cumulative worker metrics surfaced outside the internal logger.
@@ -303,6 +322,15 @@ export class Worker {
 
         const eventJson = allEvents[i];
         const shardId = eventJson.shardId ? eventJson.shardId : (eventJson.host ? eventJson.host : 'default');
+
+        // Domain filtering: skip events from non-allowed domains
+        if (this.allowedDomains && !this.allowedDomains.includes(shardId)) {
+          this.logger.debug(`[${this.workerId}]: Filtering out event from domain '${shardId}' (not in ALLOWED_DOMAINS)`);
+          messagesToRemove.push(collectedMessages[i]);
+          skippedCount++;
+          continue;
+        }
+
         const tableName: string = this.tablePrefix + shardId;
 
         const added = this.internalQueue.add(collectedMessages[i], eventJson, tableName, i);
@@ -523,11 +551,27 @@ export class Worker {
     this.logger.info(`[${this.workerId}]: Worker starting with concurrent producer/consumer loops - Queue interval: ${this.queuePullInterval}ms, DB interval: ${this.dbProcessInterval}ms`);
 
     // Run both loops concurrently - they operate independently
-    await Promise.all([
+    this.startPromise = Promise.all([
       this.runQueueProducerLoop(),
       this.runDBConsumerLoop()
-    ]);
+    ]).then(() => {
+      /* collapse Promise.all results to Promise<void> */
+    });
+
+    await this.startPromise;
 
     this.logger.info(`[${this.workerId}]: Worker stopped. Final internal queue size: ${this.internalQueue.getQueueSize()}`);
+  }
+
+  /**
+   * Gracefully stop the worker. Sets state to INACTIVE so both loops
+   * exit after their current iteration, then waits for them to finish.
+   */
+  async stop(): Promise<void> {
+    this.logger.info(`[${this.workerId}]: Stop requested`);
+    this.state = WorkerState.INACTIVE;
+    if (this.startPromise) {
+      await this.startPromise;
+    }
   }
 }
