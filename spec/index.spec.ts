@@ -324,6 +324,38 @@ describe('A Worker', () => {
     expect(spyRemoveBatch).toHaveBeenCalled();
   });
 
+  it('should increment the discarded event counter and surface it via getStats when events expire', async () => {
+    const itemReply: AwsError = {
+      Type: 'Sender',
+      Code: 'ResourceNotFoundException',
+      name: 'ResourceNotFoundException',
+      message: 'Requested resource not found',
+      $fault: 'client',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'df840ab9-e68b-5c0e-b4a0-5094f2dfaee8',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    };
+
+    const testWorker = new Worker({ logger: Logger });
+    // Baseline before any processing: no events discarded yet.
+    expect(testWorker.getStats().discardedEventCount).toBe(0);
+
+    // receiveMsgReply[1] carries an event with timestamp 0, which is older than
+    // maxAge; combined with a missing table it takes the expired-discard path.
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => receiveMsgReply[1]);
+    sqsMock.on(DeleteMessageCommand).resolves(deleteMsgReply);
+    ddbMock.on(DescribeTableCommand).rejects(itemReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
+    await testWorker.startAsync();
+
+    expect(testWorker.getStats().discardedEventCount).toBeGreaterThan(0);
+  });
+
   it('should remove messages from SQS immediately after adding to internal queue, even if DB write fails', async () => {
     const spyTableExists = spyOn(EventDB.prototype, 'TableExists').and.callThrough();
     const spyWrite = spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
