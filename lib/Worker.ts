@@ -46,6 +46,7 @@ export class Worker {
   private useBatchRemove: boolean;
   private pendingRemovals: PendingRemoval[];
   private maxRemovalRetries: number;
+  private discardedEventCount: number;
 
   constructor(opts: IWorkerOptions) {
     this.logger = opts.logger;
@@ -69,6 +70,14 @@ export class Worker {
     this.useBatchRemove = true;
     this.pendingRemovals = [];
     this.maxRemovalRetries = 3;
+    this.discardedEventCount = 0;
+  }
+
+  // Cumulative worker metrics surfaced outside the internal logger.
+  getStats(): { discardedEventCount: number } {
+    return {
+      discardedEventCount: this.discardedEventCount
+    };
   }
 
   private getEnvWithDeprecation(newName: string, deprecatedName: string, defaultValue: number): number {
@@ -352,6 +361,7 @@ export class Worker {
             if (Date.now() - qm.event.timestamp > this.maxAge) {
               this.logger.warn(`[${this.workerId}]: Event has expired. Discarding.`);
               messagesToDiscard.push(qm);
+              this.discardedEventCount++;
             } else {
               // Table doesn't exist yet but event hasn't expired - requeue for retry
               messagesToRequeue.push(qm);
@@ -388,7 +398,7 @@ export class Worker {
         this.internalQueue.requeue(failedMessages);
       }
 
-      this.logger.debug(`[${this.workerId}]: Processed batch: ${successCount} successful, ${failedMessages.length} failed, ${messagesToDiscard.length} discarded, ${messagesToRequeue.length} requeued for missing tables`);
+      this.logger.debug(`[${this.workerId}]: Processed batch: ${successCount} successful, ${failedMessages.length} failed, ${messagesToDiscard.length} discarded, ${messagesToRequeue.length} requeued for missing tables (total discarded: ${this.discardedEventCount})`);
 
     } catch (err) {
       this.logger.error(`[${this.workerId}]: Error processing internal queue batch: ${err}`);
