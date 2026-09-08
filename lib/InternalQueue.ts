@@ -109,6 +109,16 @@ export default class InternalQueue {
       return true;
     });
 
+    // Enforce the same maxQueueSize bound add() enforces. Requeued messages are
+    // prepended (they become the head), so drop the oldest requeue candidates —
+    // those at the front — until they fit within the remaining capacity.
+    const availableCapacity = this.getAvailableCapacity();
+    if (requeueableMessages.length > availableCapacity) {
+      const dropCount = requeueableMessages.length - availableCapacity;
+      requeueableMessages.splice(0, dropCount);
+      this.logger.error(`[${this.instanceId}]: Internal queue is full (${this.maxQueueSize}), dropping ${dropCount} oldest requeue candidate(s)`);
+    }
+
     // Prepend requeued messages before the head
     if (this.headIndex >= requeueableMessages.length) {
       // Space before head — fill it in
