@@ -159,6 +159,47 @@ describe('InternalQueue', () => {
       queue.requeue(batch2);
       expect(queue.getQueueSize()).toBe(0); // dropped
     });
+
+    it('should never grow past maxQueueSize under sustained requeue volume', () => {
+      // Simulate a sustained downstream DB failure: every tick a whole batch
+      // fails to write and is handed back to requeue(). Because Worker also
+      // keeps consuming batches and re-requeuing them, the requeue candidates
+      // handed over per tick can alone exceed maxQueueSize. Under the bug this
+      // grows the queue without bound. Use a high maxRetries so the maxRetries
+      // drop path does not mask the maxQueueSize enforcement.
+      process.env.INTERNAL_QUEUE_BATCH_SIZE = '20';
+      process.env.INTERNAL_QUEUE_MAX_RETRIES = '1000';
+      queue = new InternalQueue(Logger, 'test-requeue-bound');
+      queue.maxQueueSize = 5;
+
+      // Fill to the bound.
+      for (let i = 0; i < 5; i++) {
+        queue.add({}, { event: `e${i}` }, 'table', i);
+      }
+      expect(queue.getQueueSize()).toBe(5);
+
+      // Sustained failure loop: drain the whole queue, then hand it back to
+      // requeue() together with a fresh oversized batch of failed messages —
+      // far more candidates than maxQueueSize can ever hold.
+      for (let tick = 0; tick < 20; tick++) {
+        const drained = queue.getBatch();
+        const oversized: any[] = [];
+        for (let i = 0; i < 50; i++) {
+          oversized.push({
+            message: {},
+            event: { event: `failed-${tick}-${i}` },
+            tableName: 'table',
+            messageIndex: i,
+            retryCount: 0,
+            addedAt: Date.now(),
+          });
+        }
+        queue.requeue([...drained, ...oversized]);
+        expect(queue.getQueueSize()).toBeLessThanOrEqual(queue.maxQueueSize);
+      }
+
+      expect(queue.getQueueSize()).toBeLessThanOrEqual(queue.maxQueueSize);
+    });
   });
 
   describe('groupByTable()', () => {
