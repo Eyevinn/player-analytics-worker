@@ -636,6 +636,77 @@ describe('A Worker', () => {
     expect(spyWrite).toHaveBeenCalled();
   });
 
+  it('should retry a partially-failed batch delete with the original message (carrying ReceiptHandle)', async () => {
+    // Two messages received; the batch delete succeeds for index 0 and fails
+    // for index 1. The adapter returns AWS DeleteMessageBatch entries keyed by
+    // the stringified index of the message in the batch — NOT the messages
+    // themselves — so the failed entry has no ReceiptHandle. The worker must
+    // map that Id back to the original message so the individual retry issues a
+    // valid delete.
+    const twoMessagesReply = {
+      $metadata: {},
+      Messages: [
+        {
+          MessageId: 'msg-ok',
+          ReceiptHandle: 'receipt-ok',
+          MD5OfBody: 'hash-ok',
+          Body: JSON.stringify({
+            event: 'playing',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 120,
+            host: 'mock.tenant.one',
+          }),
+        },
+        {
+          MessageId: 'msg-fail',
+          ReceiptHandle: 'receipt-fail',
+          MD5OfBody: 'hash-fail',
+          Body: JSON.stringify({
+            event: 'playing',
+            timestamp: Date.now(),
+            playhead: 0,
+            duration: 120,
+            host: 'mock.tenant.one',
+          }),
+        },
+      ],
+    };
+
+    // Partial batch failure in the AWS response shape: entries carry only `Id`
+    // (the batch index) and, for the failure, Code/Message but no ReceiptHandle.
+    const spyRemoveBatch = spyOn(Queue.prototype, 'removeBatch').and.returnValue(
+      Promise.resolve({
+        successful: [{ Id: '0' }],
+        failed: [{ Id: '1', Code: 'InternalError', Message: 'transient' }],
+      })
+    );
+    // Individual remove is used to retry the failed message. Succeed so the
+    // retry can clear, and capture the object it was called with.
+    const spyRemove = spyOn(Queue.prototype, 'remove').and.returnValue(Promise.resolve({}));
+
+    spyOn(EventDB.prototype, 'TableExists').and.callThrough();
+    spyOn(EventDB.prototype, 'writeMultiple').and.callThrough();
+
+    const testWorker = new Worker({ logger: Logger });
+    sqsMock.on(ReceiveMessageCommand).callsFake(() => twoMessagesReply);
+    ddbMock.on(PutItemCommand).resolves(putItemReply);
+    ddbMock.on(DescribeTableCommand).resolves(describeTableReply);
+
+    testWorker.setTestIntervals(100, 200);
+    testWorker.setLoopIterations(3);
+    await testWorker.startAsync();
+
+    expect(spyRemoveBatch).toHaveBeenCalled();
+    // The failed message must be retried via the individual remove path...
+    expect(spyRemove).toHaveBeenCalled();
+    // ...and the object passed to it must be the ORIGINAL message carrying the
+    // ReceiptHandle (not the AWS BatchResultErrorEntry, which lacks it).
+    const retriedArg = spyRemove.calls.argsFor(0)[0] as any;
+    expect(retriedArg.ReceiptHandle).toBe('receipt-fail');
+    expect(retriedArg.MessageId).toBe('msg-fail');
+  });
+
   it('should treat empty/whitespace ALLOWED_DOMAINS as disabled filtering (not drop all events)', async () => {
     // Edge case: env var is present but parses to an empty list after trim+filter
     process.env.ALLOWED_DOMAINS = ' , ,,  ';

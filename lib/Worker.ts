@@ -201,6 +201,30 @@ export class Worker {
     }
   }
 
+  /**
+   * Map AWS DeleteMessageBatch result entries ({ Id, ... }) back to the
+   * original message objects. The adapter builds each entry's `Id` as the
+   * stringified index of the message in the array passed to removeBatch, so we
+   * resolve it back to the real message (which carries the `ReceiptHandle`
+   * required for any subsequent individual delete/retry). Entries whose `Id`
+   * cannot be resolved are skipped rather than passed through in the wrong shape.
+   */
+  private mapBatchEntriesToMessages(entries: any[] | undefined, messages: any[]): any[] {
+    if (!entries || entries.length === 0) {
+      return [];
+    }
+    const mapped: any[] = [];
+    for (const entry of entries) {
+      const index = Number(entry?.Id);
+      if (Number.isInteger(index) && index >= 0 && index < messages.length) {
+        mapped.push(messages[index]);
+      } else {
+        this.logger.warn(`[${this.workerId}]: Could not map batch result entry Id '${entry?.Id}' back to an original message`);
+      }
+    }
+    return mapped;
+  }
+
   private async removeMessagesFromQueue(messages: any[]): Promise<void> {
     // First, process any pending removals from previous failures
     await this.processPendingRemovals();
@@ -228,8 +252,15 @@ export class Worker {
           failedMessages = messages;
           this.logger.warn(`[${this.workerId}]: Batch remove returned all ${failCount} messages as failed`);
         } else {
-          successfulMessages = result.successful || [];
-          failedMessages = result.failed || [];
+          // The adapter (SqsQueueAdapter.removeFromQueueBatch) returns AWS
+          // DeleteMessageBatch result entries, NOT the original messages. Each
+          // entry only carries an `Id` — the stringified index of the message
+          // within the `messages` array we passed in — and, for failures, no
+          // `ReceiptHandle`. Map those ids back to the original message objects
+          // so that both success accounting and (crucially) retries of failed
+          // deletes still have the `ReceiptHandle` they need to succeed.
+          successfulMessages = this.mapBatchEntriesToMessages(result.successful, messages);
+          failedMessages = this.mapBatchEntriesToMessages(result.failed, messages);
           if (failCount > 0) {
             this.logger.error(`[${this.workerId}]: Failed to remove ${failCount} messages from queue`);
           }
