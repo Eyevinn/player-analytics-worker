@@ -63,6 +63,10 @@ This architecture allows SQS polling and database writes to happen concurrently,
 
 When running multiple workers, the `STARTUP_JITTER_MS` setting helps avoid the "thundering herd" problem by adding a random delay (between 0 and the configured value) before each worker starts. This spreads out initial SQS and database connections across workers.
 
+## License
+
+MIT, see [LICENSE](LICENSE).
+
 # Support
 
 Join our [community on Slack](http://slack.osaas.io) where you can post any questions regarding any of our open source projects. Eyevinn's consulting business can also offer you:
